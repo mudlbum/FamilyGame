@@ -96,9 +96,9 @@
 
 <body class="flex flex-col h-screen items-center justify-center p-2 sm:p-4">
 
-    <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden">
+    <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden overflow-y-auto lg:overflow-y-hidden">
         <!-- Left Panel: Players & Scores -->
-        <div class="panel w-full lg:w-1/5 p-4 flex flex-col">
+        <div class="panel w-full lg:w-1/5 p-4 flex flex-col flex-shrink-0">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-center">Players</h2>
                 <button id="theme-toggle-btn" class="p-2 rounded-full bg-gray-700/50">🌙</button>
@@ -150,7 +150,7 @@
         </div>
 
         <!-- Center Panel: Game Area -->
-        <div class="flex-grow flex flex-col gap-4 h-[50vh] lg:h-auto">
+        <div class="flex-grow flex flex-col gap-4 min-h-[400px] lg:h-auto">
             <div class="panel p-4 text-center">
                 <div id="game-status" class="text-xl font-semibold h-8">Waiting to start...</div>
                 <div id="word-display" class="text-3xl font-bold mt-1 h-12"></div>
@@ -174,9 +174,9 @@
         </div>
 
         <!-- Right Panel: Chat & Guesses -->
-        <div class="panel w-full lg:w-1/4 p-4 flex flex-col">
+        <div class="panel w-full lg:w-1/4 p-4 flex flex-col flex-shrink-0">
             <h2 class="text-2xl font-bold text-center mb-4">Chat</h2>
-            <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2"></div>
+            <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2 min-h-[150px]"></div>
             <div class="flex gap-2">
                 <input type="text" id="guess-input" placeholder="Type your guess..." class="flex-grow p-2">
                 <button id="send-guess-btn" class="game-button px-4 py-2 rounded-lg">Send</button>
