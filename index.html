@@ -11,35 +11,59 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #162447;
+            --border-color: #1f4068;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0e0;
+            --accent-color: #e43f5a;
+            --accent-hover: #b8324f;
+        }
+
+        .light-mode {
+            --bg-primary: #f0f4f8;
+            --bg-secondary: #ffffff;
+            --border-color: #d1d9e6;
+            --text-primary: #1a1a2e;
+            --text-secondary: #5a5a8e;
+            --accent-color: #ff4d6d;
+            --accent-hover: #e03c5a;
+        }
+
         body {
             font-family: 'Poppins', sans-serif;
-            background-color: #1a1a2e;
-            color: #e0e0e0;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
         }
         .panel {
-            background-color: #162447;
-            border: 2px solid #1f4068;
+            background-color: var(--bg-secondary);
+            border: 2px solid var(--border-color);
             border-radius: 0.75rem;
+            transition: background-color 0.3s, border-color 0.3s;
         }
         .game-button {
-            background-color: #e43f5a;
+            background-color: var(--accent-color);
             color: white;
             transition: background-color 0.3s;
+            border-radius: 0.5rem;
         }
-        .game-button:hover { background-color: #b8324f; }
+        .game-button:hover { background-color: var(--accent-hover); }
         .game-button:disabled { background-color: #555; cursor: not-allowed; }
         
         #drawing-canvas { cursor: crosshair; }
         .tool-btn.active {
-            background-color: #e43f5a;
-            box-shadow: 0 0 0 2px #162447, 0 0 0 4px #e43f5a;
+            background-color: var(--accent-color);
+            box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--accent-color);
         }
         .modal-backdrop { background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
         .modal-content { background-color: #162447; }
         select, input {
-            background-color: #1a1a2e;
-            border: 1px solid #1f4068;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
             border-radius: 0.5rem;
+            color: var(--text-primary);
         }
     </style>
 </head>
@@ -48,7 +72,10 @@
     <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden">
         <!-- Left Panel: Players & Scores -->
         <div class="panel w-full lg:w-1/5 p-4 flex flex-col">
-            <h2 class="text-2xl font-bold text-center mb-4">Players</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-center">Players</h2>
+                <button id="theme-toggle-btn" class="p-2 rounded-full bg-gray-700/50">🌙</button>
+            </div>
             <div id="player-list" class="space-y-3 overflow-y-auto flex-grow"></div>
             <div class="mt-4">
                 <div id="voice-controls" class="space-y-2">
@@ -61,7 +88,7 @@
                  <div id="music-controls" class="mt-4 space-y-2">
                     <label class="text-sm">Music Volume</label>
                     <div class="flex items-center gap-2">
-                        <button id="mute-music-btn">🔇</button>
+                        <button id="mute-music-btn">🔊</button>
                         <input type="range" id="music-volume-slider" min="0" max="1" step="0.01" value="0.2" class="w-full">
                     </div>
                 </div>
@@ -129,7 +156,7 @@
                 </select>
                 <select id="gamemode-select" class="p-2 w-full">
                     <option value="word" data-translate-key="modeWord">Classic: Draw a Word</option>
-                    <option value="ai_image" data-translate-key="modeAI">AI Mode: Draw an Image</option>
+                    <option value="ai_image" data-translate-key="modeAI">AI Mode: Guess the Image</option>
                 </select>
                 <button id="join-game-btn" class="game-button w-full py-2 px-4 rounded-lg" data-translate-key="joinButton">Join Game</button>
             </div>
@@ -173,6 +200,7 @@
         const musicVolumeSlider = document.getElementById('music-volume-slider');
         const hostMusicVolumeSlider = document.getElementById('host-music-volume-slider');
         const muteMusicBtn = document.getElementById('mute-music-btn');
+        const themeToggleBtn = document.getElementById('theme-toggle-btn');
 
         // --- Game State & Config ---
         let peer, myPeerId, roomId, isHost, connections = {};
@@ -187,12 +215,12 @@
 
         // --- Multi-language Content ---
         const translations = {
-            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Draw an Image" },
-            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Dibuja una Imagen" },
-            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Dessiner une image" },
-            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: 이미지 그리기" },
-            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：画一张图" },
-            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: एक छवि बनाएं" },
+            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Guess the Image" },
+            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Adivina la Imagen" },
+            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Devinez l'image" },
+            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: 이미지 추측" },
+            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜图" },
+            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: छवि का अनुमान लगाएं" },
         };
         const wordLists = {
             en: ["house", "dog", "sun", "car", "tree", "book", "computer", "guitar", "pizza", "coffee", "bicycle", "flower", "moon", "star", "bridge", "river", "mountain", "cloud", "rain", "hat", "boat", "key", "door", "window"],
@@ -338,7 +366,7 @@
                 isRoundActive: false,
                 language: 'en',
                 gameMode: 'word',
-                wordLists: null // Will be populated by Gemini or fallback
+                wordLists: null
             };
         }
 
@@ -347,10 +375,15 @@
             const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
             if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
                 gameState.isRoundActive = false;
-                gameState.players[peerId].score += 10;
-                gameState.players[gameState.currentArtistPeerId].score += 5;
                 
-                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWord})`;
+                if (gameState.gameMode === 'ai_image') {
+                    gameState.players[peerId].score += 15;
+                } else {
+                    gameState.players[peerId].score += 10;
+                    gameState.players[gameState.currentArtistPeerId].score += 5;
+                }
+                
+                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWordSet[gameState.language]})`;
                 addChatMessage('System', correctMessage, true);
                 broadcast({ type: 'chat', senderName: 'System', message: correctMessage, isCorrect: true });
                 
@@ -426,8 +459,24 @@
         }
 
         // --- Gemini API Calls ---
-        async function getWordsFromGemini(count) {
+        async function checkApiKey() {
             const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            if (!apiKey) return false;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "hello" }] }] })
+                });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function getWordsFromGemini(count) {
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.` }] }],
@@ -574,19 +623,24 @@
             });
 
             const isArtist = myPeerId === gameState.currentArtistPeerId;
-            artistTools.classList.toggle('hidden', !isArtist);
+            artistTools.classList.toggle('hidden', !isArtist || gameState.gameMode === 'ai_image');
             aiImageDisplay.classList.add('hidden');
 
             if (gameState.isRoundActive) {
-                gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId]?.name} is drawing!`;
-                if (isArtist) {
-                    wordDisplay.textContent = gameState.secretWord;
-                    if (gameState.gameMode === 'ai_image' && gameState.aiImageBase64) {
+                if (gameState.gameMode === 'ai_image') {
+                    gameStatus.textContent = "Guess the prompt for the image!";
+                    wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
+                    if (gameState.aiImageBase64) {
                         aiImage.src = `data:image/png;base64,${gameState.aiImageBase64}`;
                         aiImageDisplay.classList.remove('hidden');
                     }
                 } else {
-                    wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
+                    gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId]?.name} is drawing!`;
+                    if (isArtist) {
+                        wordDisplay.textContent = gameState.secretWord;
+                    } else {
+                        wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
+                    }
                 }
             } else {
                 if (gameState.currentRound >= gameState.totalRounds && gameState.totalRounds > 0) {
@@ -629,6 +683,17 @@
             playerName = playerNameInput.value.trim();
             if (playerName) {
                 await Tone.start();
+                
+                const selectedMode = gamemodeSelect.value;
+                if (isHost && selectedMode === 'ai_image') {
+                    const keyIsValid = await checkApiKey();
+                    if (!keyIsValid) {
+                        alert("Could not connect to AI service. Please check your API key or select Classic Mode.");
+                        gamemodeSelect.value = 'word';
+                        return;
+                    }
+                }
+
                 setupModal.classList.add('hidden');
                 gameContainer.classList.remove('hidden');
                 resizeCanvas();
@@ -639,7 +704,7 @@
                 if (isHost) {
                     myPeerId = `host-${Date.now()}`;
                     gameState.language = languageSelect.value;
-                    gameState.gameMode = gamemodeSelect.value;
+                    gameState.gameMode = selectedMode;
                     gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false };
                     hostControls.classList.remove('hidden');
                 } else {
@@ -669,7 +734,10 @@
 
         sendGuessBtn.addEventListener('click', () => {
             const guess = guessInput.value.trim();
-            if (guess && myPeerId !== gameState.currentArtistPeerId) {
+            if (guess) {
+                const isArtist = myPeerId === gameState.currentArtistPeerId;
+                if (gameState.gameMode === 'word' && isArtist) return;
+                
                 const data = { type: 'guess', peerId: myPeerId, guess };
                 if (isHost) {
                     handleGuess(myPeerId, guess);
@@ -820,6 +888,21 @@
                 broadcast({type: 'musicVolume', volume: volume});
             }
         });
+
+        // Theme Toggle
+        themeToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('light-mode');
+            const isLight = document.body.classList.contains('light-mode');
+            themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+            localStorage.setItem('theme', isLight ? 'light' : 'dark');
+        });
+
+        // Load saved theme
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+            themeToggleBtn.textContent = '☀️';
+        }
 
         setLanguage(languageSelect.value);
 
