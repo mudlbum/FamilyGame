@@ -37,7 +37,6 @@
             background-color: var(--bg-primary);
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
-            /* Removed 'overflow: hidden' to allow the body to scroll on mobile */
         }
 
         .panel {
@@ -66,7 +65,7 @@
 
         #drawing-canvas {
             cursor: crosshair;
-            touch-action: none; /* Prevent scrolling/zooming on canvas */
+            touch-action: none; 
         }
 
         .tool-btn.active {
@@ -100,7 +99,7 @@
         <div class="panel w-full lg:w-1/5 p-4 flex flex-col flex-shrink-0">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-center">Players</h2>
-                <button id="theme-toggle-btn" class="p-2 rounded-full bg-gray-700/50">🌙</button>
+                <button id="theme-toggle-btn" class="p-2 rounded-full bg-gray-700/50 text-xl">☀️</button>
             </div>
             <div id="player-list" class="space-y-3 overflow-y-auto flex-grow"></div>
             <div class="mt-4">
@@ -257,10 +256,10 @@
         let gameState = createInitialGameState();
         let drawing = false;
         let lastX = 0, lastY = 0;
-        let currentBrushSize = 3, currentColor = '#FFFFFF', isErasing = false;
+        let currentBrushSize = 3, currentColor, isErasing = false; // currentColor is now set dynamically
         let localStream, isMuted = false;
         let musicPlayer;
-        let myLanguage = 'en'; // Each client’s local UI language
+        let myLanguage = 'en';
 
         // --- Multi-language Content ---
         const translations = {
@@ -271,7 +270,7 @@
             zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜ASCII艺术" },
             hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: ASCII कला का अनुमान लगाएं" },
         };
-        const wordLists = { // Fallback word list
+        const wordLists = {
             en: ["house", "dog", "sun", "car", "tree"], es: ["casa", "perro", "sol", "coche", "árbol"], fr: ["maison", "chien", "soleil", "voiture", "arbre"], ko: ["집", "개", "해", "차", "나무"], zh: ["房子", "狗", "太阳", "汽车", "树"], hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़"],
         };
 
@@ -282,7 +281,6 @@
         // --- Helper Functions ---
         function maskWord(word) {
             if (!word) return '';
-            // Reveal spaces/punctuation, mask letters/ideographs with underscores
             return Array.from(word).map(ch => /\p{L}|\p{Number}/u.test(ch) ? '_' : ch).join(' ');
         }
 
@@ -337,7 +335,6 @@
         }
 
         function handleData(data) {
-            // Host handles game logic and broadcasts state
             if (isHost) {
                 switch (data.type) {
                     case 'guess':
@@ -355,12 +352,11 @@
                         broadcast(data);
                         break;
                 }
-            } else { // Guests receive and apply state changes
+            } else { 
                 switch (data.type) {
                     case 'gameState':
                         const wasRoundActive = gameState.isRoundActive;
                         gameState = data.state;
-                        // Redraw canvas if game state includes drawing data (future improvement)
                         updateUI();
                         if (!wasRoundActive && gameState.isRoundActive) {
                             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -406,26 +402,34 @@
                 language: 'en',
                 gameMode: 'word',
                 wordLists: null,
+                roundScore: 10, // Max score for a round
                 aiAscii: null,
             };
         }
 
+        // --- NEW: Updated scoring logic ---
         function handleGuess(peerId, guess) {
             const guesserName = gameState.players[peerId].name;
             const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
+            
             if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
                 gameState.isRoundActive = false;
 
+                const guesserScore = gameState.roundScore;
+                const artistScore = Math.ceil(guesserScore / 2); // Drawer gets half points, rounded up
+
                 if (gameState.gameMode === 'ai_image') {
+                    // AI mode has a fixed score for simplicity
                     gameState.players[peerId].score += 15;
                 } else {
-                    gameState.players[peerId].score += 10;
-                    if(gameState.players[gameState.currentArtistPeerId]) {
-                        gameState.players[gameState.currentArtistPeerId].score += 5;
+                    // Award points based on the remaining round score
+                    gameState.players[peerId].score += guesserScore;
+                    if (gameState.players[gameState.currentArtistPeerId]) {
+                        gameState.players[gameState.currentArtistPeerId].score += artistScore;
                     }
                 }
 
-                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWordSet.en})`;
+                const correctMessage = `${guesserName} guessed the word! (+${guesserScore})`;
                 addChatMessage('System', correctMessage, true);
                 broadcast({ type: 'chat', senderName: 'System', message: correctMessage, isCorrect: true });
 
@@ -437,6 +441,10 @@
 
                 setTimeout(startNextRound, 3000);
             } else {
+                // For an incorrect guess, reduce the potential score for the round
+                if (gameState.isRoundActive && gameState.roundScore > 1) {
+                    gameState.roundScore--;
+                }
                 addChatMessage(guesserName, guess, false);
                 broadcast({ type: 'chat', senderName: guesserName, message: guess, isCorrect: false });
             }
@@ -446,7 +454,8 @@
             if (isHost) {
                 gameState.totalRounds = Object.keys(gameState.players).length * 2;
                 gameState.currentRound++;
-                gameState.aiAscii = null; // Reset ASCII art
+                gameState.roundScore = 10; // Reset potential score for the new round
+                gameState.aiAscii = null;
 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 broadcast({ type: 'clearCanvas' });
@@ -478,7 +487,6 @@
                         gameState.isRoundActive = true;
                         gameState.aiAscii = ascii;
                     } else {
-                        // Graceful fallback to Classic
                         gameState.gameMode = 'word';
                         gameState.isRoundActive = true;
                     }
@@ -526,7 +534,7 @@
         }
         
         async function getWordsFromGemini(count) {
-            const apiKey = ""; // API key will be provided by the environment
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
             const payload = {
@@ -569,12 +577,12 @@
                 throw new Error("Unexpected Gemini response format");
             } catch (error) {
                 console.error("Error fetching words:", error);
-                return wordLists; // fallback to local default word list
+                return wordLists;
             }
         }
 
         async function generateAsciiArt(prompt) {
-            const apiKey = ""; // API key will be provided by the environment
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const systemHint = `Create small, recognizable ASCII art using only text characters. Keep it simple (max ~25 lines), no code fences. Subject: "${prompt}".`;
 
@@ -604,7 +612,6 @@
         function resizeCanvas() {
             const container = document.getElementById('canvas-container');
             if (container.clientWidth > 0 && container.clientHeight > 0) {
-                // Save current canvas content
                 let imageData = null;
                 try {
                     imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -612,11 +619,9 @@
                     console.error("Could not get image data from canvas, it might be tainted.", e);
                 }
 
-                // Resize canvas
                 canvas.width = container.clientWidth;
                 canvas.height = container.clientHeight;
 
-                // Restore canvas content
                 if (imageData) {
                     ctx.putImageData(imageData, 0, 0);
                 }
@@ -687,12 +692,10 @@
             const isArtist = myPeerId === gameState.currentArtistPeerId;
             artistTools.classList.toggle('hidden', !isArtist || gameState.gameMode === 'ai_image');
             
-            // Default: hide visual areas
             aiImageDisplay.classList.add('hidden');
             aiAsciiDisplay.classList.add('hidden');
 
             if (gameState.isRoundActive) {
-                // Pick the viewer’s language word
                 const viewerWord = gameState.secretWordSet?.[myLanguage];
 
                 if (gameState.gameMode === 'ai_image') {
@@ -704,7 +707,6 @@
                     }
                 } else {
                     if (isArtist) {
-                        // Artist sees the word in *their* language
                         gameStatus.textContent = "Your turn to draw!";
                         wordDisplay.textContent = viewerWord || '';
                     } else {
@@ -748,6 +750,18 @@
                 }
             });
         }
+        
+        // --- NEW: Helper to set default color based on theme ---
+        function updateDefaultDrawingColor() {
+            const isLight = document.body.classList.contains('light-mode');
+            const newColor = isLight ? '#000000' : '#FFFFFF';
+            
+            // Only change the color if it's currently a default, to avoid overriding user's choice
+            if (currentColor === '#FFFFFF' || currentColor === '#000000' || !currentColor) {
+                currentColor = newColor;
+                colorPicker.value = newColor;
+            }
+        }
 
         languageSelect.addEventListener('change', (e) => setLanguage(e.target.value));
 
@@ -766,7 +780,6 @@
             const hash = window.location.hash.substring(1);
             isHost = !hash;
             
-            // IMPORTANT: everyone keeps their own UI language locally
             myLanguage = languageSelect.value;
             setLanguage(myLanguage);
             
@@ -774,17 +787,16 @@
 
             if (isHost) {
                 myPeerId = `host-${Date.now()}`;
-                gameState.language = myLanguage; // Host sets initial game language
+                gameState.language = myLanguage;
                 gameState.gameMode = selectedMode;
                 gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false, lang: myLanguage };
                 hostControls.classList.remove('hidden');
-                // Ping API once for host if AI mode is selected
                 if (selectedMode === 'ai_image') {
                     updateApiIndicator(await checkApiKey());
                 }
             } else {
                 myPeerId = `guest-${Date.now()}`;
-                [roomId, gameState.language, gameState.gameMode] = hash.split('_'); // Room defaults
+                [roomId, gameState.language, gameState.gameMode] = hash.split('_');
             }
             
             initializePeer(myPeerId);
@@ -857,7 +869,7 @@
         // --- API Controls ---
         if (testApiBtn) {
             testApiBtn.addEventListener('click', async () => {
-                updateApiIndicator(undefined); // Checking...
+                updateApiIndicator(undefined);
                 const ok = await checkApiKey();
                 updateApiIndicator(ok);
             });
@@ -937,7 +949,7 @@
         function initializeMusic() {
             if (musicPlayer) return;
             musicPlayer = new Tone.Player({
-                url: "Family Fun Fiesta.mp3",
+                url: "Family Fun Fiesta.mp3", // Using a placeholder URL
                 loop: true,
                 volume: Tone.gainToDb(0.2),
                 onload: () => musicPlayer.start()
@@ -963,22 +975,29 @@
             }
         });
 
-        // Theme Toggle
+        // --- NEW: Updated Theme Toggle Logic ---
         themeToggleBtn.addEventListener('click', () => {
             document.body.classList.toggle('light-mode');
             const isLight = document.body.classList.contains('light-mode');
-            themeToggleBtn.textContent = isLight ? '☀️' : '🌙';
+            // Show moon in light mode, sun in dark mode
+            themeToggleBtn.textContent = isLight ? '🌙' : '☀️';
             localStorage.setItem('theme', isLight ? 'light' : 'dark');
+            // Update the default color picker value
+            updateDefaultDrawingColor();
         });
 
-        // --- Initial Setup ---
+        // --- NEW: Updated Initial Setup ---
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'light') {
             document.body.classList.add('light-mode');
-            themeToggleBtn.textContent = '☀️';
+            themeToggleBtn.textContent = '🌙'; // Show moon in light mode
+        } else {
+            themeToggleBtn.textContent = '☀️'; // Show sun in dark mode
         }
 
+        updateDefaultDrawingColor(); // Set initial drawing color
         setLanguage(languageSelect.value);
+
     </script>
 </body>
 </html>
