@@ -460,6 +460,7 @@
 
         // --- Gemini API Calls ---
         async function checkApiKey() {
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             if (!apiKey) return false;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             try {
@@ -475,7 +476,7 @@
         }
 
         async function getWordsFromGemini(count) {
-            const apiKey = "";
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.` }] }],
@@ -511,7 +512,7 @@
         }
 
         async function generateAIImage(prompt) {
-            const apiKey = "";
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
             const payload = { instances: [{ prompt: `A simple, clear, cartoon-style drawing of: ${prompt}` }], parameters: { "sampleCount": 1 } };
 
@@ -862,6 +863,7 @@
         // Music Controls
         function initializeMusic() {
             musicPlayer = new Tone.Player({
+                url: "Family Fun Fiesta.mp3",
                 loop: true,
                 volume: Tone.gainToDb(0.2),
                 onload: () => musicPlayer.start()
@@ -907,3 +909,4 @@
     </script>
 </body>
 </html>
+�
