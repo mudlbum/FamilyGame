@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sketchy Signals - P2P Drawing Game</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -37,7 +37,7 @@
             background-color: var(--bg-primary);
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
-            overflow: hidden; /* Prevent body scroll */
+            /* Removed 'overflow: hidden' to allow the body to scroll on mobile */
         }
 
         .panel {
@@ -94,10 +94,9 @@
     </style>
 </head>
 
-<body class="flex flex-col h-screen items-center justify-center p-2 sm:p-4">
+<body class="flex flex-col min-h-screen items-center p-2 sm:p-4">
 
-    <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden overflow-y-auto lg:overflow-y-hidden">
-        <!-- Left Panel: Players & Scores -->
+    <div id="game-container" class="w-full max-w-screen-2xl mx-auto flex-grow flex flex-col lg:flex-row gap-4 hidden">
         <div class="panel w-full lg:w-1/5 p-4 flex flex-col flex-shrink-0">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-center">Players</h2>
@@ -149,8 +148,7 @@
             </div>
         </div>
 
-        <!-- Center Panel: Game Area -->
-        <div class="flex-grow flex flex-col gap-4 min-h-[400px] lg:h-auto">
+        <div class="flex-grow flex flex-col gap-4 min-h-[300px] sm:min-h-[400px] lg:h-auto">
             <div class="panel p-4 text-center">
                 <div id="game-status" class="text-xl font-semibold h-8">Waiting to start...</div>
                 <div id="word-display" class="text-3xl font-bold mt-1 h-12"></div>
@@ -173,7 +171,6 @@
             </div>
         </div>
 
-        <!-- Right Panel: Chat & Guesses -->
         <div class="panel w-full lg:w-1/4 p-4 flex flex-col flex-shrink-0">
             <h2 class="text-2xl font-bold text-center mb-4">Chat</h2>
             <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2 min-h-[150px]"></div>
@@ -184,7 +181,6 @@
         </div>
     </div>
 
-    <!-- Setup Modal -->
     <div id="setup-modal" class="modal-backdrop fixed inset-0 flex items-center justify-center z-50">
         <div class="modal-content p-8 rounded-lg text-center max-w-md">
             <h1 class="text-3xl font-bold mb-4" data-translate-key="title">Sketchy Signals</h1>
