@@ -427,7 +427,7 @@
 
         // --- Gemini API Calls ---
         async function getWordsFromGemini(count) {
-            const apiKey = "";
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
                 contents: [{ parts: [{ text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.` }] }],
