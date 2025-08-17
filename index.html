@@ -49,7 +49,37 @@
         <!-- Left Panel: Players & Scores -->
         <div class="panel w-full lg:w-1/5 p-4 flex flex-col">
             <h2 class="text-2xl font-bold text-center mb-4">Players</h2>
-            <div id="player-list" class="space-y-3 overflow-y-auto"></div>
+            <div id="player-list" class="space-y-3 overflow-y-auto flex-grow"></div>
+            <div class="mt-4">
+                <div id="voice-controls" class="space-y-2">
+                    <button id="join-voice-btn" class="game-button w-full py-2">Join Voice Chat</button>
+                    <div id="call-controls" class="hidden flex gap-2">
+                        <button id="mute-btn" class="game-button w-full py-2">Mute</button>
+                        <button id="end-call-btn" class="game-button w-full py-2 bg-gray-600 hover:bg-gray-700">Leave</button>
+                    </div>
+                </div>
+                 <div id="music-controls" class="mt-4 space-y-2">
+                    <label class="text-sm">Music Volume</label>
+                    <div class="flex items-center gap-2">
+                        <button id="mute-music-btn">🔇</button>
+                        <input type="range" id="music-volume-slider" min="0" max="1" step="0.01" value="0.2" class="w-full">
+                    </div>
+                </div>
+                <div id="host-controls" class="mt-4 hidden">
+                     <div class="mb-4">
+                        <label class="block text-sm font-semibold mb-1">Share Link:</label>
+                        <div class="flex">
+                            <input type="text" id="share-link" class="w-full p-2 rounded-l-md text-xs" readonly>
+                            <button id="copy-link-btn" class="game-button px-3 rounded-r-md text-sm">Copy</button>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm">Master Music Volume</label>
+                        <input type="range" id="host-music-volume-slider" min="0" max="1" step="0.01" value="0.2" class="w-full">
+                    </div>
+                    <button id="start-game-btn" class="game-button w-full py-2 px-4 rounded-lg mt-4">Start Game</button>
+                </div>
+            </div>
         </div>
 
         <!-- Center Panel: Game Area -->
@@ -106,15 +136,19 @@
         </div>
     </div>
     
+    <div id="audio-container" class="hidden"></div>
+
     <script type="module">
-        // --- PeerJS & Tone.js are loaded from CDN ---
-        
         // --- DOM Elements ---
         const gameContainer = document.getElementById('game-container');
         const setupModal = document.getElementById('setup-modal');
         const playerNameInput = document.getElementById('player-name-input');
         const joinGameBtn = document.getElementById('join-game-btn');
+        const shareLinkInput = document.getElementById('share-link');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+        const hostControls = document.getElementById('host-controls');
         const playerListDiv = document.getElementById('player-list');
+        const startGameBtn = document.getElementById('start-game-btn');
         const gameStatus = document.getElementById('game-status');
         const wordDisplay = document.getElementById('word-display');
         const aiImageDisplay = document.getElementById('ai-image-display');
@@ -131,6 +165,14 @@
         const sendGuessBtn = document.getElementById('send-guess-btn');
         const languageSelect = document.getElementById('language-select');
         const gamemodeSelect = document.getElementById('gamemode-select');
+        const joinVoiceBtn = document.getElementById('join-voice-btn');
+        const callControls = document.getElementById('call-controls');
+        const muteBtn = document.getElementById('mute-btn');
+        const endCallBtn = document.getElementById('end-call-btn');
+        const audioContainer = document.getElementById('audio-container');
+        const musicVolumeSlider = document.getElementById('music-volume-slider');
+        const hostMusicVolumeSlider = document.getElementById('host-music-volume-slider');
+        const muteMusicBtn = document.getElementById('mute-music-btn');
 
         // --- Game State & Config ---
         let peer, myPeerId, roomId, isHost, connections = {};
@@ -139,6 +181,9 @@
         let drawing = false;
         let lastX = 0, lastY = 0;
         let currentBrushSize = 3, currentColor = '#FFFFFF', isErasing = false;
+        let localStream, isMuted = false;
+        let audioNodes = {};
+        let musicPlayer;
 
         // --- Multi-language Content ---
         const translations = {
@@ -150,12 +195,12 @@
             hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: एक छवि बनाएं" },
         };
         const wordLists = {
-            en: ["house", "dog", "sun", "car", "tree", "book", "computer", "guitar", "pizza", "coffee"],
-            es: ["casa", "perro", "sol", "coche", "árbol", "libro", "computadora", "guitarra", "pizza", "café"],
-            fr: ["maison", "chien", "soleil", "voiture", "arbre", "livre", "ordinateur", "guitare", "pizza", "café"],
-            ko: ["집", "개", "해", "차", "나무", "책", "컴퓨터", "기타", "피자", "커피"],
-            zh: ["房子", "狗", "太阳", "汽车", "树", "书", "电脑", "吉他", "披萨", "咖啡"],
-            hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़", "किताब", "कंप्यूटर", "गिटार", "पिज्जा", "कॉफ़ी"],
+            en: ["house", "dog", "sun", "car", "tree", "book", "computer", "guitar", "pizza", "coffee", "bicycle", "flower", "moon", "star", "bridge", "river", "mountain", "cloud", "rain", "hat", "boat", "key", "door", "window"],
+            es: ["casa", "perro", "sol", "coche", "árbol", "libro", "computadora", "guitarra", "pizza", "café", "bicicleta", "flor", "luna", "estrella", "puente", "río", "montaña", "nube", "lluvia", "sombrero", "barco", "llave", "puerta", "ventana"],
+            fr: ["maison", "chien", "soleil", "voiture", "arbre", "livre", "ordinateur", "guitare", "pizza", "café", "vélo", "fleur", "lune", "étoile", "pont", "rivière", "montagne", "nuage", "pluie", "chapeau", "bateau", "clé", "porte", "fenêtre"],
+            ko: ["집", "개", "해", "차", "나무", "책", "컴퓨터", "기타", "피자", "커피", "자전거", "꽃", "달", "별", "다리", "강", "산", "구름", "비", "모자", "배", "열쇠", "문", "창문"],
+            zh: ["房子", "狗", "太阳", "汽车", "树", "书", "电脑", "吉他", "披萨", "咖啡", "自行车", "花", "月亮", "星星", "桥", "河", "山", "云", "雨", "帽子", "船", "钥匙", "门", "窗户"],
+            hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़", "किताब", "कंप्यूटर", "गिटार", "पिज्जा", "कॉफ़ी", "साइकिल", "फूल", "चांद", "तारा", "पुल", "नदी", "पहाड़", "बादल", "बारिश", "टोपी", "नाव", "चाबी", "दरवाजा", "खिड़की"],
         };
 
         // --- Sound Effects ---
@@ -170,12 +215,13 @@
                 if (isHost) {
                     const url = new URL(window.location.href);
                     url.hash = `${myPeerId}_${gameState.language}_${gameState.gameMode}`;
-                    console.log(`SHARE LINK: ${url.href}`);
+                    shareLinkInput.value = url.href;
                 } else {
                     connectToHost();
                 }
             });
             peer.on('connection', setupConnection);
+            peer.on('call', handleIncomingCall);
         }
 
         function connectToHost() {
@@ -188,16 +234,28 @@
             conn.on('open', () => {
                 if (isHost) {
                     if (Object.keys(gameState.players).length < 10) {
-                        gameState.players[conn.peer] = { name: conn.metadata.name, score: 0 };
+                        gameState.players[conn.peer] = { name: conn.metadata.name, score: 0, isMuted: false };
+                        updateUI();
                         broadcast({ type: 'gameState', state: gameState });
                     }
+                }
+                 if (localStream) {
+                    peer.call(conn.peer, localStream);
                 }
             });
             conn.on('data', handleData);
             conn.on('close', () => {
                 delete connections[conn.peer];
+                if (audioNodes[conn.peer]) {
+                    audioNodes[conn.peer].source.disconnect();
+                    delete audioNodes[conn.peer];
+                }
+                const audioEl = document.getElementById(`audio-${conn.peer}`);
+                if (audioEl) audioEl.remove();
+
                 if (isHost) {
                     delete gameState.players[conn.peer];
+                    updateUI();
                     broadcast({ type: 'gameState', state: gameState });
                 }
             });
@@ -210,8 +268,23 @@
                         handleGuess(data.peerId, data.guess);
                         break;
                     case 'draw':
+                        broadcast(data, data.peerId); 
+                        drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
+                        break;
                     case 'clearCanvas':
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
                         broadcast(data, data.peerId);
+                        break;
+                    case 'remoteMute':
+                         if (gameState.players[data.targetPeerId]) {
+                            gameState.players[data.targetPeerId].isMuted = data.isMuted;
+                            connections[data.targetPeerId]?.send({type: 'forceMute', isMuted: data.isMuted});
+                            updateUI();
+                            broadcast({type: 'gameState', state: gameState});
+                        }
+                        break;
+                    case 'musicVolume':
+                        broadcast(data);
                         break;
                 }
             } else {
@@ -233,14 +306,22 @@
                     case 'chat':
                         addChatMessage(data.senderName, data.message, data.isCorrect);
                         break;
+                    case 'forceMute':
+                        isMuted = data.isMuted;
+                        if(localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
+                        updateMuteButtonUI();
+                        break;
+                    case 'musicVolume':
+                        if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(data.volume);
+                        break;
                 }
             }
         }
 
         function broadcast(data, excludePeer = null) {
-            Object.keys(connections).forEach(peerId => {
-                if (peerId !== excludePeer) {
-                    connections[peerId].send(data);
+            Object.values(connections).forEach(conn => {
+                 if (conn.peer !== excludePeer) {
+                    conn.send(data);
                 }
             });
         }
@@ -256,58 +337,112 @@
                 isRoundActive: false,
                 language: 'en',
                 gameMode: 'word',
+                words: []
             };
         }
 
         function handleGuess(peerId, guess) {
             const guesserName = gameState.players[peerId].name;
-            if (guess.toLowerCase() === gameState.secretWord.toLowerCase()) {
+            if (gameState.isRoundActive && guess.toLowerCase() === gameState.secretWord.toLowerCase()) {
+                gameState.isRoundActive = false;
                 gameState.players[peerId].score += 10;
                 gameState.players[gameState.currentArtistPeerId].score += 5;
-                broadcast({ type: 'chat', senderName: 'System', message: `${guesserName} guessed the word!`, isCorrect: true });
+                
+                const correctMessage = `${guesserName} guessed the word!`;
+                addChatMessage('System', correctMessage, true);
+                broadcast({ type: 'chat', senderName: 'System', message: correctMessage, isCorrect: true });
+                
+                correctSound();
                 broadcast({ type: 'playSound', sound: 'correct' });
+                
+                updateUI();
+                broadcast({ type: 'gameState', state: gameState });
+                
                 setTimeout(startNextRound, 3000);
             } else {
+                addChatMessage(guesserName, guess, false);
                 broadcast({ type: 'chat', senderName: guesserName, message: guess, isCorrect: false });
             }
         }
 
         async function startNextRound() {
-            gameState.currentRound++;
-            if (gameState.currentRound > gameState.totalRounds) {
-                const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
-                gameState.isRoundActive = false;
-                broadcast({ type: 'gameState', state: gameState });
-                broadcast({ type: 'chat', senderName: 'System', message: `Game Over! Winner is ${winner.name}!`, isCorrect: true });
-                return;
-            }
-
-            const playerIds = Object.keys(gameState.players);
-            gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
-            
-            if (gameState.gameMode === 'ai_image') {
-                const promptWord = wordLists[gameState.language][Math.floor(Math.random() * wordLists[gameState.language].length)];
-                gameState.secretWord = promptWord;
+            if (isHost) {
+                gameState.totalRounds = Object.keys(gameState.players).length * 2;
+                gameState.currentRound++;
                 
-                if (isHost) {
-                    const base64Data = await generateAIImage(promptWord);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                broadcast({ type: 'clearCanvas' });
+
+                if (gameState.currentRound > gameState.totalRounds || Object.keys(gameState.players).length < 2) {
+                    const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
+                    gameState.isRoundActive = false;
+                    
+                    const gameOverMsg = `Game Over! Winner is ${winner ? winner.name : 'nobody'}!`;
+                    addChatMessage('System', gameOverMsg, true);
+                    broadcast({ type: 'chat', senderName: 'System', message: gameOverMsg, isCorrect: true });
+                    
+                    updateUI();
+                    broadcast({ type: 'gameState', state: gameState });
+
+                    startGameBtn.classList.remove('hidden');
+                    return;
+                }
+
+                const playerIds = Object.keys(gameState.players);
+                gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
+                
+                if (gameState.words.length === 0) {
+                    gameState.words = await getWordsFromGemini(gameState.language, 20);
+                }
+                gameState.secretWord = gameState.words.pop() || "Fallback";
+
+                if (gameState.gameMode === 'ai_image') {
+                    const base64Data = await generateAIImage(gameState.secretWord);
                     if (base64Data) {
                         gameState.isRoundActive = true;
-                        broadcast({ type: 'gameState', state: { ...gameState, aiImageBase64: base64Data } });
+                        gameState.aiImageBase64 = base64Data;
                     } else {
                         gameState.gameMode = 'word';
-                        startNextRound();
+                        gameState.isRoundActive = true;
                     }
+                } else {
+                    gameState.isRoundActive = true;
                 }
-            } else {
-                gameState.secretWord = wordLists[gameState.language][Math.floor(Math.random() * wordLists[gameState.language].length)];
-                gameState.isRoundActive = true;
+
+                updateUI();
                 broadcast({ type: 'gameState', state: gameState });
+                turnStartSound();
+                broadcast({ type: 'playSound', sound: 'turnStart' });
             }
-            broadcast({ type: 'playSound', sound: 'turnStart' });
         }
 
-        // --- Gemini API Call ---
+        // --- Gemini API Calls ---
+        async function getWordsFromGemini(language, count) {
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: `Give me a JSON array of ${count} simple, common, drawable nouns in ${language}.` }] }],
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: { type: "ARRAY", items: { type: "STRING" } }
+                }
+            };
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) return wordLists[language];
+                const result = await response.json();
+                const text = result.candidates[0].content.parts[0].text;
+                return JSON.parse(text);
+            } catch (error) {
+                console.error("Gemini word generation failed, using fallback list.", error);
+                return wordLists[language];
+            }
+        }
+
         async function generateAIImage(prompt) {
             const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
@@ -331,8 +466,10 @@
         // --- Drawing Logic ---
         function resizeCanvas() {
             const container = document.getElementById('canvas-container');
-            canvas.width = container.clientWidth;
-            canvas.height = container.clientHeight;
+            if (container.clientWidth > 0 && container.clientHeight > 0) {
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+            }
         }
 
         function startDrawing(e) {
@@ -351,13 +488,19 @@
             const coords = getEventCoords(e);
             const drawData = {
                 type: 'draw',
+                peerId: myPeerId,
                 x0: lastX / canvas.width, y0: lastY / canvas.height,
                 x1: coords.x / canvas.width, y1: coords.y / canvas.height,
                 color: currentColor, size: currentBrushSize
             };
+            
             drawLine(lastX, lastY, coords.x, coords.y, currentColor, currentBrushSize, true);
-            connections[roomId]?.send(drawData);
-            if(isHost) broadcast(drawData);
+            
+            if(isHost) {
+                broadcast(drawData, myPeerId);
+            } else {
+                connections[roomId]?.send(drawData);
+            }
             [lastX, lastY] = [coords.x, coords.y];
         }
 
@@ -380,11 +523,35 @@
         // --- UI & Event Listeners ---
         function updateUI() {
             playerListDiv.innerHTML = '';
-            Object.values(gameState.players).forEach(p => {
+            Object.entries(gameState.players).forEach(([peerId, p]) => {
                 const div = document.createElement('div');
-                div.className = `p-2 rounded-lg flex justify-between items-center ${p.name === gameState.players[gameState.currentArtistPeerId]?.name ? 'bg-blue-500/50' : ''}`;
-                div.innerHTML = `<span>${p.name} ${p.name === gameState.players[gameState.currentArtistPeerId]?.name ? '✏️' : ''}</span><span class="font-bold">${p.score}</span>`;
+                div.className = `p-2 rounded-lg flex justify-between items-center ${peerId === gameState.currentArtistPeerId ? 'bg-blue-500/50' : ''}`;
+                
+                let muteIcon = '';
+                if (isHost && peerId !== myPeerId) {
+                    muteIcon = `<button data-peerid="${peerId}" class="mute-toggle-btn text-xs">${p.isMuted ? 'Unmute' : 'Mute'}</button>`;
+                } else if (p.isMuted) {
+                    muteIcon = '<span>🔇</span>';
+                }
+
+                div.innerHTML = `<span>${p.name} ${peerId === gameState.currentArtistPeerId ? '✏️' : ''}</span><div class="flex items-center gap-2"><span class="font-bold">${p.score}</span>${muteIcon}</div>`;
                 playerListDiv.appendChild(div);
+            });
+            
+            document.querySelectorAll('.mute-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const targetPeerId = e.target.dataset.peerid;
+                    const player = gameState.players[targetPeerId];
+                    if (player) {
+                        const newMuteState = !player.isMuted;
+                        if (isHost) {
+                            connections[targetPeerId]?.send({ type: 'forceMute', isMuted: newMuteState });
+                            player.isMuted = newMuteState;
+                            updateUI();
+                            broadcast({ type: 'gameState', state: gameState });
+                        }
+                    }
+                });
             });
 
             const isArtist = myPeerId === gameState.currentArtistPeerId;
@@ -392,7 +559,7 @@
             aiImageDisplay.classList.add('hidden');
 
             if (gameState.isRoundActive) {
-                gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId].name} is drawing!`;
+                gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId]?.name} is drawing!`;
                 if (isArtist) {
                     wordDisplay.textContent = gameState.secretWord;
                     if (gameState.gameMode === 'ai_image' && gameState.aiImageBase64) {
@@ -403,9 +570,16 @@
                     wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
                 }
             } else {
-                gameStatus.textContent = "Waiting for host to start...";
+                if (gameState.currentRound >= gameState.totalRounds && gameState.totalRounds > 0) {
+                    const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
+                    gameStatus.textContent = winner ? `Game Over! Winner: ${winner.name}` : "Game Over!";
+                } else {
+                    gameStatus.textContent = "Waiting for host to start...";
+                }
                 wordDisplay.textContent = "";
             }
+            
+            startGameBtn.disabled = Object.keys(gameState.players).length < 2;
         }
 
         function addChatMessage(senderName, message, isCorrect) {
@@ -432,9 +606,10 @@
 
         languageSelect.addEventListener('change', (e) => setLanguage(e.target.value));
 
-        joinGameBtn.addEventListener('click', () => {
+        joinGameBtn.addEventListener('click', async () => {
             playerName = playerNameInput.value.trim();
             if (playerName) {
+                await Tone.start();
                 setupModal.classList.add('hidden');
                 gameContainer.classList.remove('hidden');
                 resizeCanvas();
@@ -446,8 +621,8 @@
                     myPeerId = `host-${Date.now()}`;
                     gameState.language = languageSelect.value;
                     gameState.gameMode = gamemodeSelect.value;
-                    gameState.players[myPeerId] = { name: playerName, score: 0 };
-                    setTimeout(startNextRound, 1000);
+                    gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false };
+                    hostControls.classList.remove('hidden');
                 } else {
                     myPeerId = `guest-${Date.now()}`;
                     [roomId, gameState.language, gameState.gameMode] = hash.split('_');
@@ -455,16 +630,32 @@
                 
                 initializePeer(myPeerId);
                 updateUI();
+                initializeMusic();
             }
+        });
+        
+        startGameBtn.addEventListener('click', () => {
+            if(isHost) {
+                gameState.currentRound = 0;
+                Object.values(gameState.players).forEach(p => p.score = 0);
+                startNextRound();
+                startGameBtn.classList.add('hidden');
+            }
+        });
+
+        copyLinkBtn.addEventListener('click', () => {
+            shareLinkInput.select();
+            document.execCommand('copy');
         });
 
         sendGuessBtn.addEventListener('click', () => {
             const guess = guessInput.value.trim();
-            if (guess) {
+            if (guess && myPeerId !== gameState.currentArtistPeerId) {
+                const data = { type: 'guess', peerId: myPeerId, guess };
                 if (isHost) {
                     handleGuess(myPeerId, guess);
                 } else {
-                    connections[roomId].send({ type: 'guess', peerId: myPeerId, guess });
+                    connections[roomId].send(data);
                 }
                 guessInput.value = '';
             }
@@ -487,9 +678,128 @@
         eraserBtn.addEventListener('click', () => { isErasing = true; currentColor = '#1a1a2e'; });
         clearBtn.addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const clearData = { type: 'clearCanvas' };
-            if (isHost) broadcast(clearData);
-            else connections[roomId]?.send(clearData);
+            const clearData = { type: 'clearCanvas', peerId: myPeerId };
+            if (isHost) {
+                broadcast(clearData, myPeerId);
+            } else {
+                connections[roomId]?.send(clearData);
+            }
+        });
+
+        // Voice Chat Listeners
+        joinVoiceBtn.addEventListener('click', async () => {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }});
+                joinVoiceBtn.classList.add('hidden');
+                callControls.classList.remove('hidden');
+                Object.values(connections).forEach(conn => peer.call(conn.peer, localStream));
+            } catch (err) {
+                console.error("Could not get microphone access.", err);
+            }
+        });
+
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            localStream.getAudioTracks()[0].enabled = !isMuted;
+            updateMuteButtonUI();
+        });
+
+        endCallBtn.addEventListener('click', () => {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+            Object.values(peer.connections).forEach(connArray => {
+                connArray.forEach(conn => {
+                    if (conn.type === 'media') conn.close();
+                });
+            });
+            joinVoiceBtn.classList.remove('hidden');
+            callControls.classList.add('hidden');
+        });
+
+        function handleIncomingCall(call) {
+            call.answer(localStream);
+            call.on('stream', remoteStream => {
+                setupAudioProcessing(call.peer, remoteStream);
+            });
+        }
+
+        function setupAudioProcessing(peerId, remoteStream) {
+            const audioContext = Tone.context;
+            const source = audioContext.createMediaStreamSource(remoteStream);
+            const compressor = new Tone.Compressor(-12, 4);
+            const meter = new Tone.Meter();
+            const volume = new Tone.Volume(0).toDestination();
+
+            audioNodes[peerId] = { source, compressor, meter, volume, feedbackWarningCount: 0 };
+            source.connect(compressor);
+            compressor.connect(volume);
+            volume.connect(meter);
+        }
+        
+        function monitorAudioFeedback() {
+            if (!isHost) return;
+            Object.entries(audioNodes).forEach(([peerId, node]) => {
+                const level = node.meter.getValue();
+                if (level > -6) {
+                    node.feedbackWarningCount++;
+                } else {
+                    node.feedbackWarningCount = Math.max(0, node.feedbackWarningCount - 1);
+                }
+
+                if (node.feedbackWarningCount > 4 && node.volume.volume.value > -20) {
+                    node.volume.volume.rampTo(-20, 1);
+                }
+                
+                if (node.feedbackWarningCount > 10) {
+                    if (gameState.players[peerId] && !gameState.players[peerId].isMuted) {
+                        gameState.players[peerId].isMuted = true;
+                        connections[peerId]?.send({type: 'forceMute', isMuted: true});
+                        updateUI();
+                        broadcast({type: 'gameState', state: gameState});
+                    }
+                    node.feedbackWarningCount = 0;
+                }
+            });
+        }
+        setInterval(monitorAudioFeedback, 500);
+        
+        function updateMuteButtonUI() {
+            muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+            muteBtn.classList.toggle('bg-green-500', !isMuted);
+            muteBtn.classList.toggle('hover:bg-green-600', !isMuted);
+        }
+        
+        // Music Controls
+        function initializeMusic() {
+            musicPlayer = new Tone.Player({
+                url: "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde6b758b.mp3",
+                loop: true,
+                volume: Tone.gainToDb(0.2),
+                onload: () => musicPlayer.start()
+            }).toDestination();
+        }
+        
+        musicVolumeSlider.addEventListener('input', (e) => {
+            if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(e.target.value);
+        });
+        
+        muteMusicBtn.addEventListener('click', () => {
+             if (musicPlayer) {
+                musicPlayer.mute = !musicPlayer.mute;
+                muteMusicBtn.textContent = musicPlayer.mute ? '🔊' : '🔇';
+            }
+        });
+
+        hostMusicVolumeSlider.addEventListener('input', (e) => {
+            if (isHost) {
+                const volume = e.target.value;
+                 if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(volume);
+                broadcast({type: 'musicVolume', volume: volume});
+            }
         });
 
         setLanguage(languageSelect.value);
