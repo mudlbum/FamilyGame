@@ -65,7 +65,7 @@
 
         #drawing-canvas {
             cursor: crosshair;
-            touch-action: none; 
+            touch-action: none;
         }
 
         .tool-btn.active {
@@ -342,7 +342,18 @@
                         break;
                     case 'draw':
                         broadcast(data, data.peerId);
-                        drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
+                        // **MODIFICATION START**
+                        let receivedColorForHost = data.color;
+                        const hostTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+                        if (data.senderTheme && data.senderTheme !== hostTheme) {
+                            if (receivedColorForHost === '#FFFFFF') {
+                                receivedColorForHost = '#000000';
+                            } else if (receivedColorForHost === '#000000') {
+                                receivedColorForHost = '#FFFFFF';
+                            }
+                        }
+                        drawLine(data.x0, data.y0, data.x1, data.y1, receivedColorForHost, data.size, false);
+                        // **MODIFICATION END**
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -352,7 +363,7 @@
                         broadcast(data);
                         break;
                 }
-            } else { 
+            } else {
                 switch (data.type) {
                     case 'gameState':
                         const wasRoundActive = gameState.isRoundActive;
@@ -363,7 +374,18 @@
                         }
                         break;
                     case 'draw':
-                        drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
+                        // **MODIFICATION START**
+                        let receivedColor = data.color;
+                        const myTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+                        if (data.senderTheme && data.senderTheme !== myTheme) {
+                            if (receivedColor === '#FFFFFF') {
+                                receivedColor = '#000000';
+                            } else if (receivedColor === '#000000') {
+                                receivedColor = '#FFFFFF';
+                            }
+                        }
+                        drawLine(data.x0, data.y0, data.x1, data.y1, receivedColor, data.size, false);
+                        // **MODIFICATION END**
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -381,6 +403,7 @@
                 }
             }
         }
+
 
         function broadcast(data, excludePeer = null) {
             Object.values(connections).forEach(conn => {
@@ -649,8 +672,11 @@
                 peerId: myPeerId,
                 x0: lastX / canvas.width, y0: lastY / canvas.height,
                 x1: coords.x / canvas.width, y1: coords.y / canvas.height,
-                color: isErasing ? getComputedStyle(document.body).getPropertyValue('--bg-secondary') : currentColor, 
-                size: currentBrushSize
+                color: isErasing ? getComputedStyle(document.body).getPropertyValue('--bg-secondary') : currentColor,
+                size: currentBrushSize,
+                // **MODIFICATION START**
+                senderTheme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
+                // **MODIFICATION END**
             };
 
             drawLine(lastX, lastY, coords.x, coords.y, drawData.color, currentBrushSize, true);
