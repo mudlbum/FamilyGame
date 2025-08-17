@@ -334,21 +334,23 @@
                 totalRounds: 10,
                 currentArtistPeerId: null,
                 secretWord: '',
+                secretWordSet: {},
                 isRoundActive: false,
                 language: 'en',
                 gameMode: 'word',
-                words: []
+                wordLists: null // Will be populated by Gemini or fallback
             };
         }
 
         function handleGuess(peerId, guess) {
             const guesserName = gameState.players[peerId].name;
-            if (gameState.isRoundActive && guess.toLowerCase() === gameState.secretWord.toLowerCase()) {
+            const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
+            if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
                 gameState.isRoundActive = false;
                 gameState.players[peerId].score += 10;
                 gameState.players[gameState.currentArtistPeerId].score += 5;
                 
-                const correctMessage = `${guesserName} guessed the word!`;
+                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWord})`;
                 addChatMessage('System', correctMessage, true);
                 broadcast({ type: 'chat', senderName: 'System', message: correctMessage, isCorrect: true });
                 
@@ -391,10 +393,17 @@
                 const playerIds = Object.keys(gameState.players);
                 gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
                 
-                if (gameState.words.length === 0) {
-                    gameState.words = await getWordsFromGemini(gameState.language, 20);
+                if (!gameState.wordLists) {
+                    gameState.wordLists = await getWordsFromGemini(20);
                 }
-                gameState.secretWord = gameState.words.pop() || "Fallback";
+                
+                const wordIndex = Math.floor(Math.random() * gameState.wordLists.en.length);
+                gameState.secretWordSet = {};
+                for (const lang in gameState.wordLists) {
+                    gameState.secretWordSet[lang] = gameState.wordLists[lang][wordIndex];
+                }
+                gameState.secretWord = gameState.secretWordSet[gameState.language];
+
 
                 if (gameState.gameMode === 'ai_image') {
                     const base64Data = await generateAIImage(gameState.secretWord);
@@ -417,14 +426,24 @@
         }
 
         // --- Gemini API Calls ---
-        async function getWordsFromGemini(language, count) {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+        async function getWordsFromGemini(count) {
+            const apiKey = "";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             const payload = {
-                contents: [{ parts: [{ text: `Give me a JSON array of ${count} simple, common, drawable nouns in ${language}.` }] }],
+                contents: [{ parts: [{ text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.` }] }],
                 generationConfig: {
                     responseMimeType: "application/json",
-                    responseSchema: { type: "ARRAY", items: { type: "STRING" } }
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "en": { "type": "ARRAY", "items": { "type": "STRING" } },
+                            "es": { "type": "ARRAY", "items": { "type": "STRING" } },
+                            "fr": { "type": "ARRAY", "items": { "type": "STRING" } },
+                            "ko": { "type": "ARRAY", "items": { "type": "STRING" } },
+                            "zh": { "type": "ARRAY", "items": { "type": "STRING" } },
+                            "hi": { "type": "ARRAY", "items": { "type": "STRING" } }
+                        }
+                    }
                 }
             };
             try {
@@ -433,13 +452,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                if (!response.ok) return wordLists[language];
+                if (!response.ok) return wordLists;
                 const result = await response.json();
                 const text = result.candidates[0].content.parts[0].text;
                 return JSON.parse(text);
             } catch (error) {
                 console.error("Gemini word generation failed, using fallback list.", error);
-                return wordLists[language];
+                return wordLists;
             }
         }
 
