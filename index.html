@@ -65,7 +65,9 @@
 
         #drawing-canvas {
             cursor: crosshair;
-            touch-action: none;
+            /* FIX START: Removed 'touch-action: none;' to allow browser to handle multi-touch gestures like scrolling. */
+            /* touch-action: none; */
+            /* FIX END */
         }
 
         .tool-btn.active {
@@ -260,6 +262,11 @@
         let localStream, isMuted = false;
         let musicPlayer;
         let myLanguage = 'en';
+
+        // FIX START: Variables for maintaining a consistent drawing aspect ratio
+        const DRAWING_ASPECT_RATIO = 16 / 9;
+        let drawable = { x: 0, y: 0, width: 0, height: 0 };
+        // FIX END
 
         // --- Multi-language Content ---
         const translations = {
@@ -538,7 +545,7 @@
         async function checkApiKey() {
             const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo"; // API key will be provided by the environment
             if (!apiKey) return false;
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
             try {
                 const r = await fetch(apiUrl, {
                     method: 'POST',
@@ -567,8 +574,8 @@
         }
         
         async function getWordsFromGemini(count) {
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
             const payload = {
                 contents: [{
@@ -579,17 +586,6 @@
                 }],
                 generationConfig: {
                     responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            "en": { type: "ARRAY", items: { type: "STRING" } },
-                            "es": { type: "ARRAY", items: { type: "STRING" } },
-                            "fr": { type: "ARRAY", items: { type: "STRING" } },
-                            "ko": { type: "ARRAY", items: { type: "STRING" } },
-                            "zh": { type: "ARRAY", items: { type: "STRING" } },
-                            "hi": { type: "ARRAY", items: { type: "STRING" } }
-                        }
-                    }
                 }
             };
 
@@ -605,7 +601,9 @@
                 const result = await response.json();
                 
                 if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                    return JSON.parse(result.candidates[0].content.parts[0].text);
+                    // The response is a markdown-formatted JSON string, so we need to clean it.
+                    const cleanedText = result.candidates[0].content.parts[0].text.replace(/^```json\s*|```\s*$/g, '');
+                    return JSON.parse(cleanedText);
                 }
 
                 throw new Error("Unexpected Gemini response format");
@@ -616,8 +614,8 @@
         }
 
         async function generateAsciiArt(prompt) {
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
             const systemHint = `Create small, recognizable ASCII art using only text characters. Keep it simple (max ~25 lines), no code fences. Subject: "${prompt}".`;
 
             try {
@@ -643,26 +641,62 @@
         }
 
         // --- Drawing Logic ---
+
+        // FIX START: Overhauled resizeCanvas to enforce a consistent aspect ratio
         function resizeCanvas() {
             const container = document.getElementById('canvas-container');
-            if (container.clientWidth > 0 && container.clientHeight > 0) {
-                let imageData = null;
-                try {
-                    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                } catch (e) {
-                    console.error("Could not get image data from canvas, it might be tainted.", e);
-                }
+            const { clientWidth, clientHeight } = container;
 
-                canvas.width = container.clientWidth;
-                canvas.height = container.clientHeight;
+            if (clientWidth <= 0 || clientHeight <= 0) return;
 
-                if (imageData) {
-                    ctx.putImageData(imageData, 0, 0);
-                }
+            // Preserve existing drawing to redraw it scaled
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            if (canvas.width > 0 && canvas.height > 0) {
+                 tempCtx.drawImage(canvas, 0, 0);
             }
+
+            // Set canvas to fill container
+            canvas.width = clientWidth;
+            canvas.height = clientHeight;
+
+            // Calculate dimensions of the centered drawable area
+            let newWidth = clientWidth;
+            let newHeight = newWidth / DRAWING_ASPECT_RATIO;
+            if (newHeight > clientHeight) {
+                newHeight = clientHeight;
+                newWidth = newHeight * DRAWING_ASPECT_RATIO;
+            }
+
+            drawable = {
+                width: newWidth,
+                height: newHeight,
+                x: (clientWidth - newWidth) / 2,
+                y: (clientHeight - newHeight) / 2,
+            };
+
+            // Clear canvas and draw the (scaled) old content
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (tempCanvas.width > 0) {
+                ctx.drawImage(tempCanvas, drawable.x, drawable.y, drawable.width, drawable.height);
+            }
+            
+            // Optional: Draw a border to visualize the drawable area
+            ctx.strokeStyle = 'rgba(128, 128, 128, 0.2)';
+            ctx.strokeRect(drawable.x, drawable.y, drawable.width, drawable.height);
         }
+        // FIX END
 
         function startDrawing(e) {
+            // FIX START: Allow two-finger scroll on mobile
+            if (e.touches && e.touches.length > 1) {
+                drawing = false; // Stop any drawing if multiple fingers are used
+                return;
+            }
+            // FIX END
+
             if (myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
             e.preventDefault();
             drawing = true;
@@ -675,20 +709,35 @@
         }
 
         function draw(e) {
+            // FIX START: Prevent drawing during a two-finger scroll
+            if (e.touches && e.touches.length > 1) {
+                return;
+            }
+            // FIX END
+
             if (!drawing || myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
             e.preventDefault();
             const coords = getEventCoords(e);
+
+            // FIX START: Normalize coordinates based on the drawable area
             const drawData = {
                 type: 'draw',
                 peerId: myPeerId,
-                x0: lastX / canvas.width, y0: lastY / canvas.height,
-                x1: coords.x / canvas.width, y1: coords.y / canvas.height,
+                x0: lastX / drawable.width, y0: lastY / drawable.height,
+                x1: coords.x / drawable.width, y1: coords.y / drawable.height,
                 color: isErasing ? getComputedStyle(document.body).getPropertyValue('--bg-secondary') : currentColor,
                 size: currentBrushSize,
                 senderTheme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
             };
+            // FIX END
+            
+            // Use local coordinates directly for the drawer's canvas
+            const localX0 = lastX + drawable.x;
+            const localY0 = lastY + drawable.y;
+            const localX1 = coords.x + drawable.x;
+            const localY1 = coords.y + drawable.y;
 
-            drawLine(lastX, lastY, coords.x, coords.y, drawData.color, currentBrushSize, true);
+            drawLine(localX0, localY0, localX1, localY1, drawData.color, currentBrushSize, true);
 
             if (isHost) {
                 broadcast(drawData, myPeerId);
@@ -697,22 +746,37 @@
             }
             [lastX, lastY] = [coords.x, coords.y];
         }
-
+        
+        // FIX START: Updated drawLine to work with both local (pixel) and remote (normalized) coordinates
         function drawLine(x0, y0, x1, y1, color, size, isLocal) {
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = size;
             ctx.lineCap = 'round';
-            ctx.moveTo(isLocal ? x0 : x0 * canvas.width, isLocal ? y0 : y0 * canvas.height);
-            ctx.lineTo(isLocal ? x1 : x1 * canvas.width, isLocal ? y1 : y1 * canvas.height);
+            if (isLocal) {
+                // Local coordinates are already absolute pixels
+                ctx.moveTo(x0, y0);
+                ctx.lineTo(x1, y1);
+            } else {
+                // Remote coordinates are normalized, scale them to the drawable area
+                ctx.moveTo(x0 * drawable.width + drawable.x, y0 * drawable.height + drawable.y);
+                ctx.lineTo(x1 * drawable.width + drawable.x, y1 * drawable.height + drawable.y);
+            }
             ctx.stroke();
         }
+        // FIX END
 
+        // FIX START: Updated getEventCoords to be relative to the drawable area
         function getEventCoords(e) {
             const rect = canvas.getBoundingClientRect();
             const event = e.touches ? e.touches[0] : e;
-            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+            // Return coordinates relative to the drawable area's top-left corner
+            return {
+                x: event.clientX - rect.left - drawable.x,
+                y: event.clientY - rect.top - drawable.y
+            };
         }
+        // FIX END
 
         // --- UI & Event Listeners ---
         function updateUI() {
@@ -982,7 +1046,7 @@
         function initializeMusic() {
             if (musicPlayer) return;
             musicPlayer = new Tone.Player({
-                url: "Family Fun Fiesta.mp3", // Using a placeholder URL
+                url: "https://storage.googleapis.com/sketchy-signals-sounds/Family%20Fun%20Fiesta.mp3",
                 loop: true,
                 volume: Tone.gainToDb(0.2),
                 onload: () => musicPlayer.start()
