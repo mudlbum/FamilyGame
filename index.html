@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sketchy Signals - P2P Drawing Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+        }
+        .panel {
+            background-color: #162447;
+            border: 2px solid #1f4068;
+            border-radius: 0.75rem;
+        }
+        .game-button {
+            background-color: #e43f5a;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .game-button:hover { background-color: #b8324f; }
+        .game-button:disabled { background-color: #555; cursor: not-allowed; }
+        
+        #drawing-canvas { cursor: crosshair; }
+        .tool-btn.active {
+            background-color: #e43f5a;
+            box-shadow: 0 0 0 2px #162447, 0 0 0 4px #e43f5a;
+        }
+        .modal-backdrop { background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
+        .modal-content { background-color: #162447; }
+        select, input {
+            background-color: #1a1a2e;
+            border: 1px solid #1f4068;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen items-center justify-center p-4">
+
+    <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden">
+        <!-- Left Panel: Players & Scores -->
+        <div class="panel w-full lg:w-1/5 p-4 flex flex-col">
+            <h2 class="text-2xl font-bold text-center mb-4">Players</h2>
+            <div id="player-list" class="space-y-3 overflow-y-auto"></div>
+        </div>
+
+        <!-- Center Panel: Game Area -->
+        <div class="flex-grow flex flex-col gap-4">
+            <div class="panel p-4 text-center">
+                <div id="game-status" class="text-xl font-semibold h-8">Waiting to start...</div>
+                <div id="word-display" class="text-3xl font-bold mt-1 h-12"></div>
+                <div id="ai-image-display" class="mt-2 hidden max-h-48 mx-auto">
+                    <img id="ai-image" class="max-h-48 rounded-lg mx-auto" />
+                </div>
+            </div>
+            <div id="canvas-container" class="panel p-2 flex-grow relative">
+                <canvas id="drawing-canvas"></canvas>
+                <div id="artist-tools" class="absolute top-2 right-2 flex flex-col gap-2 bg-gray-800/50 p-2 rounded-lg hidden">
+                    <input type="color" id="color-picker" value="#FFFFFF" class="w-10 h-10 rounded-md">
+                    <input type="range" id="brush-size" min="1" max="20" value="3" class="w-20">
+                    <button id="eraser-btn" class="tool-btn p-2 rounded-md">Eraser</button>
+                    <button id="clear-btn" class="p-2 rounded-md bg-red-500/80">Clear</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Chat & Guesses -->
+        <div class="panel w-full lg:w-1/4 p-4 flex flex-col">
+            <h2 class="text-2xl font-bold text-center mb-4">Chat</h2>
+            <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2"></div>
+            <div class="flex gap-2">
+                <input type="text" id="guess-input" placeholder="Type your guess..." class="flex-grow p-2">
+                <button id="send-guess-btn" class="game-button px-4 py-2 rounded-lg">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setup Modal -->
+    <div id="setup-modal" class="modal-backdrop fixed inset-0 flex items-center justify-center z-50">
+        <div class="modal-content p-8 rounded-lg text-center max-w-md">
+            <h1 class="text-3xl font-bold mb-4" data-translate-key="title">Sketchy Signals</h1>
+            <div class="space-y-4">
+                <input type="text" id="player-name-input" placeholder="Enter your name" class="p-2 w-full text-center" data-translate-key="namePlaceholder">
+                <select id="language-select" class="p-2 w-full">
+                    <option value="en">English</option>
+                    <option value="es">Español</option>
+                    <option value="fr">Français</option>
+                    <option value="ko">한국어</option>
+                    <option value="zh">中文 (Mandarin)</option>
+                    <option value="hi">हिन्दी (Hindi)</option>
+                </select>
+                <select id="gamemode-select" class="p-2 w-full">
+                    <option value="word" data-translate-key="modeWord">Classic: Draw a Word</option>
+                    <option value="ai_image" data-translate-key="modeAI">AI Mode: Draw an Image</option>
+                </select>
+                <button id="join-game-btn" class="game-button w-full py-2 px-4 rounded-lg" data-translate-key="joinButton">Join Game</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        // --- PeerJS & Tone.js are loaded from CDN ---
+        
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('game-container');
+        const setupModal = document.getElementById('setup-modal');
+        const playerNameInput = document.getElementById('player-name-input');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const playerListDiv = document.getElementById('player-list');
+        const gameStatus = document.getElementById('game-status');
+        const wordDisplay = document.getElementById('word-display');
+        const aiImageDisplay = document.getElementById('ai-image-display');
+        const aiImage = document.getElementById('ai-image');
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d');
+        const artistTools = document.getElementById('artist-tools');
+        const colorPicker = document.getElementById('color-picker');
+        const brushSizeSlider = document.getElementById('brush-size');
+        const eraserBtn = document.getElementById('eraser-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const guessInput = document.getElementById('guess-input');
+        const sendGuessBtn = document.getElementById('send-guess-btn');
+        const languageSelect = document.getElementById('language-select');
+        const gamemodeSelect = document.getElementById('gamemode-select');
+
+        // --- Game State & Config ---
+        let peer, myPeerId, roomId, isHost, connections = {};
+        let playerName = '';
+        let gameState = createInitialGameState();
+        let drawing = false;
+        let lastX = 0, lastY = 0;
+        let currentBrushSize = 3, currentColor = '#FFFFFF', isErasing = false;
+
+        // --- Multi-language Content ---
+        const translations = {
+            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Draw an Image" },
+            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Dibuja una Imagen" },
+            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Dessiner une image" },
+            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: 이미지 그리기" },
+            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：画一张图" },
+            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: एक छवि बनाएं" },
+        };
+        const wordLists = {
+            en: ["house", "dog", "sun", "car", "tree", "book", "computer", "guitar", "pizza", "coffee"],
+            es: ["casa", "perro", "sol", "coche", "árbol", "libro", "computadora", "guitarra", "pizza", "café"],
+            fr: ["maison", "chien", "soleil", "voiture", "arbre", "livre", "ordinateur", "guitare", "pizza", "café"],
+            ko: ["집", "개", "해", "차", "나무", "책", "컴퓨터", "기타", "피자", "커피"],
+            zh: ["房子", "狗", "太阳", "汽车", "树", "书", "电脑", "吉他", "披萨", "咖啡"],
+            hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़", "किताब", "कंप्यूटर", "गिटार", "पिज्जा", "कॉफ़ी"],
+        };
+
+        // --- Sound Effects ---
+        const correctSound = () => new Tone.Synth().toDestination().triggerAttackRelease("C5", "8n");
+        const turnStartSound = () => new Tone.Synth().toDestination().triggerAttackRelease("G4", "8n");
+
+        // --- PeerJS Setup ---
+        function initializePeer(id) {
+            myPeerId = id;
+            peer = new Peer(myPeerId, { host: '0.peerjs.com', port: 443, secure: true });
+            peer.on('open', () => {
+                if (isHost) {
+                    const url = new URL(window.location.href);
+                    url.hash = `${myPeerId}_${gameState.language}_${gameState.gameMode}`;
+                    console.log(`SHARE LINK: ${url.href}`);
+                } else {
+                    connectToHost();
+                }
+            });
+            peer.on('connection', setupConnection);
+        }
+
+        function connectToHost() {
+            const conn = peer.connect(roomId, { metadata: { name: playerName }, reliable: true });
+            setupConnection(conn);
+        }
+
+        function setupConnection(conn) {
+            connections[conn.peer] = conn;
+            conn.on('open', () => {
+                if (isHost) {
+                    if (Object.keys(gameState.players).length < 10) {
+                        gameState.players[conn.peer] = { name: conn.metadata.name, score: 0 };
+                        broadcast({ type: 'gameState', state: gameState });
+                    }
+                }
+            });
+            conn.on('data', handleData);
+            conn.on('close', () => {
+                delete connections[conn.peer];
+                if (isHost) {
+                    delete gameState.players[conn.peer];
+                    broadcast({ type: 'gameState', state: gameState });
+                }
+            });
+        }
+
+        function handleData(data) {
+            if (isHost) {
+                switch (data.type) {
+                    case 'guess':
+                        handleGuess(data.peerId, data.guess);
+                        break;
+                    case 'draw':
+                    case 'clearCanvas':
+                        broadcast(data, data.peerId);
+                        break;
+                }
+            } else {
+                switch (data.type) {
+                    case 'gameState':
+                        gameState = data.state;
+                        updateUI();
+                        break;
+                    case 'draw':
+                        drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
+                        break;
+                    case 'clearCanvas':
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        break;
+                    case 'playSound':
+                        if (data.sound === 'correct') correctSound();
+                        if (data.sound === 'turnStart') turnStartSound();
+                        break;
+                    case 'chat':
+                        addChatMessage(data.senderName, data.message, data.isCorrect);
+                        break;
+                }
+            }
+        }
+
+        function broadcast(data, excludePeer = null) {
+            Object.keys(connections).forEach(peerId => {
+                if (peerId !== excludePeer) {
+                    connections[peerId].send(data);
+                }
+            });
+        }
+
+        // --- Game Logic ---
+        function createInitialGameState() {
+            return {
+                players: {},
+                currentRound: 0,
+                totalRounds: 10,
+                currentArtistPeerId: null,
+                secretWord: '',
+                isRoundActive: false,
+                language: 'en',
+                gameMode: 'word',
+            };
+        }
+
+        function handleGuess(peerId, guess) {
+            const guesserName = gameState.players[peerId].name;
+            if (guess.toLowerCase() === gameState.secretWord.toLowerCase()) {
+                gameState.players[peerId].score += 10;
+                gameState.players[gameState.currentArtistPeerId].score += 5;
+                broadcast({ type: 'chat', senderName: 'System', message: `${guesserName} guessed the word!`, isCorrect: true });
+                broadcast({ type: 'playSound', sound: 'correct' });
+                setTimeout(startNextRound, 3000);
+            } else {
+                broadcast({ type: 'chat', senderName: guesserName, message: guess, isCorrect: false });
+            }
+        }
+
+        async function startNextRound() {
+            gameState.currentRound++;
+            if (gameState.currentRound > gameState.totalRounds) {
+                const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
+                gameState.isRoundActive = false;
+                broadcast({ type: 'gameState', state: gameState });
+                broadcast({ type: 'chat', senderName: 'System', message: `Game Over! Winner is ${winner.name}!`, isCorrect: true });
+                return;
+            }
+
+            const playerIds = Object.keys(gameState.players);
+            gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
+            
+            if (gameState.gameMode === 'ai_image') {
+                const promptWord = wordLists[gameState.language][Math.floor(Math.random() * wordLists[gameState.language].length)];
+                gameState.secretWord = promptWord;
+                
+                if (isHost) {
+                    const base64Data = await generateAIImage(promptWord);
+                    if (base64Data) {
+                        gameState.isRoundActive = true;
+                        broadcast({ type: 'gameState', state: { ...gameState, aiImageBase64: base64Data } });
+                    } else {
+                        gameState.gameMode = 'word';
+                        startNextRound();
+                    }
+                }
+            } else {
+                gameState.secretWord = wordLists[gameState.language][Math.floor(Math.random() * wordLists[gameState.language].length)];
+                gameState.isRoundActive = true;
+                broadcast({ type: 'gameState', state: gameState });
+            }
+            broadcast({ type: 'playSound', sound: 'turnStart' });
+        }
+
+        // --- Gemini API Call ---
+        async function generateAIImage(prompt) {
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+            const payload = { instances: [{ prompt: `A simple, clear, cartoon-style drawing of: ${prompt}` }], parameters: { "sampleCount": 1 } };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`API error: ${response.statusText}`);
+                const result = await response.json();
+                return result.predictions[0].bytesBase64Encoded;
+            } catch (error) {
+                console.error("Gemini API call failed:", error);
+                return null;
+            }
+        }
+        
+        // --- Drawing Logic ---
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+
+        function startDrawing(e) {
+            if (myPeerId !== gameState.currentArtistPeerId) return;
+            drawing = true;
+            const coords = getEventCoords(e);
+            [lastX, lastY] = [coords.x, coords.y];
+        }
+
+        function stopDrawing() {
+            drawing = false;
+        }
+
+        function draw(e) {
+            if (!drawing || myPeerId !== gameState.currentArtistPeerId) return;
+            const coords = getEventCoords(e);
+            const drawData = {
+                type: 'draw',
+                x0: lastX / canvas.width, y0: lastY / canvas.height,
+                x1: coords.x / canvas.width, y1: coords.y / canvas.height,
+                color: currentColor, size: currentBrushSize
+            };
+            drawLine(lastX, lastY, coords.x, coords.y, currentColor, currentBrushSize, true);
+            connections[roomId]?.send(drawData);
+            if(isHost) broadcast(drawData);
+            [lastX, lastY] = [coords.x, coords.y];
+        }
+
+        function drawLine(x0, y0, x1, y1, color, size, isLocal) {
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = size;
+            ctx.lineCap = 'round';
+            ctx.moveTo(isLocal ? x0 : x0 * canvas.width, isLocal ? y0 : y0 * canvas.height);
+            ctx.lineTo(isLocal ? x1 : x1 * canvas.width, isLocal ? y1 : y1 * canvas.height);
+            ctx.stroke();
+        }
+        
+        function getEventCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const event = e.touches ? e.touches[0] : e;
+            return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        }
+
+        // --- UI & Event Listeners ---
+        function updateUI() {
+            playerListDiv.innerHTML = '';
+            Object.values(gameState.players).forEach(p => {
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-lg flex justify-between items-center ${p.name === gameState.players[gameState.currentArtistPeerId]?.name ? 'bg-blue-500/50' : ''}`;
+                div.innerHTML = `<span>${p.name} ${p.name === gameState.players[gameState.currentArtistPeerId]?.name ? '✏️' : ''}</span><span class="font-bold">${p.score}</span>`;
+                playerListDiv.appendChild(div);
+            });
+
+            const isArtist = myPeerId === gameState.currentArtistPeerId;
+            artistTools.classList.toggle('hidden', !isArtist);
+            aiImageDisplay.classList.add('hidden');
+
+            if (gameState.isRoundActive) {
+                gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId].name} is drawing!`;
+                if (isArtist) {
+                    wordDisplay.textContent = gameState.secretWord;
+                    if (gameState.gameMode === 'ai_image' && gameState.aiImageBase64) {
+                        aiImage.src = `data:image/png;base64,${gameState.aiImageBase64}`;
+                        aiImageDisplay.classList.remove('hidden');
+                    }
+                } else {
+                    wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
+                }
+            } else {
+                gameStatus.textContent = "Waiting for host to start...";
+                wordDisplay.textContent = "";
+            }
+        }
+
+        function addChatMessage(senderName, message, isCorrect) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('mb-2');
+            if (isCorrect) {
+                msgDiv.innerHTML = `<p class="font-bold text-green-400">${senderName}: ${message}</p>`;
+            } else {
+                msgDiv.innerHTML = `<p><span class="font-semibold">${senderName}:</span> ${message}</p>`;
+            }
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function setLanguage(lang) {
+            document.querySelectorAll('[data-translate-key]').forEach(el => {
+                const key = el.dataset.translateKey;
+                if (translations[lang][key]) {
+                    if (el.tagName === 'INPUT') el.placeholder = translations[lang][key];
+                    else el.textContent = translations[lang][key];
+                }
+            });
+        }
+
+        languageSelect.addEventListener('change', (e) => setLanguage(e.target.value));
+
+        joinGameBtn.addEventListener('click', () => {
+            playerName = playerNameInput.value.trim();
+            if (playerName) {
+                setupModal.classList.add('hidden');
+                gameContainer.classList.remove('hidden');
+                resizeCanvas();
+
+                const hash = window.location.hash.substring(1);
+                isHost = !hash;
+
+                if (isHost) {
+                    myPeerId = `host-${Date.now()}`;
+                    gameState.language = languageSelect.value;
+                    gameState.gameMode = gamemodeSelect.value;
+                    gameState.players[myPeerId] = { name: playerName, score: 0 };
+                    setTimeout(startNextRound, 1000);
+                } else {
+                    myPeerId = `guest-${Date.now()}`;
+                    [roomId, gameState.language, gameState.gameMode] = hash.split('_');
+                }
+                
+                initializePeer(myPeerId);
+                updateUI();
+            }
+        });
+
+        sendGuessBtn.addEventListener('click', () => {
+            const guess = guessInput.value.trim();
+            if (guess) {
+                if (isHost) {
+                    handleGuess(myPeerId, guess);
+                } else {
+                    connections[roomId].send({ type: 'guess', peerId: myPeerId, guess });
+                }
+                guessInput.value = '';
+            }
+        });
+        guessInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') sendGuessBtn.click();
+        });
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('touchstart', startDrawing, { passive: false });
+        canvas.addEventListener('touchend', stopDrawing, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        window.addEventListener('resize', resizeCanvas);
+        
+        colorPicker.addEventListener('change', (e) => { currentColor = e.target.value; isErasing = false; });
+        brushSizeSlider.addEventListener('input', (e) => { currentBrushSize = e.target.value; });
+        eraserBtn.addEventListener('click', () => { isErasing = true; currentColor = '#1a1a2e'; });
+        clearBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const clearData = { type: 'clearCanvas' };
+            if (isHost) broadcast(clearData);
+            else connections[roomId]?.send(clearData);
+        });
+
+        setLanguage(languageSelect.value);
+
+    </script>
+</body>
+</html>
