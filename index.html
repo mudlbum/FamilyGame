@@ -460,7 +460,6 @@
 
         // --- Gemini API Calls ---
         async function checkApiKey() {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             if (!apiKey) return false;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             try {
@@ -682,7 +681,6 @@
         joinGameBtn.addEventListener('click', async () => {
             playerName = playerNameInput.value.trim();
             if (playerName) {
-                await Tone.start();
                 
                 const selectedMode = gamemodeSelect.value;
                 if (isHost && selectedMode === 'ai_image') {
@@ -693,7 +691,8 @@
                         return;
                     }
                 }
-
+                
+                await Tone.start();
                 setupModal.classList.add('hidden');
                 gameContainer.classList.remove('hidden');
                 resizeCanvas();
@@ -863,7 +862,6 @@
         // Music Controls
         function initializeMusic() {
             musicPlayer = new Tone.Player({
-                url: "Family Fun Fiesta.mp3",
                 loop: true,
                 volume: Tone.gainToDb(0.2),
                 onload: () => musicPlayer.start()
