@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Sketchy Signals - P2P Drawing Game</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -36,30 +37,55 @@
             background-color: var(--bg-primary);
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
+            overflow: hidden; /* Prevent body scroll */
         }
+
         .panel {
             background-color: var(--bg-secondary);
             border: 2px solid var(--border-color);
             border-radius: 0.75rem;
             transition: background-color 0.3s, border-color 0.3s;
         }
+
         .game-button {
             background-color: var(--accent-color);
             color: white;
             transition: background-color 0.3s;
             border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
         }
-        .game-button:hover { background-color: var(--accent-hover); }
-        .game-button:disabled { background-color: #555; cursor: not-allowed; }
-        
-        #drawing-canvas { cursor: crosshair; }
+
+        .game-button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .game-button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        #drawing-canvas {
+            cursor: crosshair;
+            touch-action: none; /* Prevent scrolling/zooming on canvas */
+        }
+
         .tool-btn.active {
             background-color: var(--accent-color);
             box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--accent-color);
         }
-        .modal-backdrop { background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px); }
-        .modal-content { background-color: #162447; }
-        select, input {
+
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #162447;
+        }
+
+        select,
+        input[type="text"],
+        input[type="range"] {
             background-color: var(--bg-primary);
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
@@ -67,7 +93,8 @@
         }
     </style>
 </head>
-<body class="flex flex-col h-screen items-center justify-center p-4">
+
+<body class="flex flex-col h-screen items-center justify-center p-2 sm:p-4">
 
     <div id="game-container" class="w-full max-w-screen-2xl mx-auto h-full flex flex-col lg:flex-row gap-4 hidden">
         <!-- Left Panel: Players & Scores -->
@@ -82,18 +109,30 @@
                     <button id="join-voice-btn" class="game-button w-full py-2">Join Voice Chat</button>
                     <div id="call-controls" class="hidden flex gap-2">
                         <button id="mute-btn" class="game-button w-full py-2">Mute</button>
-                        <button id="end-call-btn" class="game-button w-full py-2 bg-gray-600 hover:bg-gray-700">Leave</button>
+                        <button id="end-call-btn"
+                            class="game-button w-full py-2 bg-gray-600 hover:bg-gray-700">Leave</button>
                     </div>
                 </div>
-                 <div id="music-controls" class="mt-4 space-y-2">
+                <div id="music-controls" class="mt-4 space-y-2">
                     <label class="text-sm">Music Volume</label>
                     <div class="flex items-center gap-2">
                         <button id="mute-music-btn">🔊</button>
-                        <input type="range" id="music-volume-slider" min="0" max="1" step="0.01" value="0.2" class="w-full">
+                        <input type="range" id="music-volume-slider" min="0" max="1" step="0.01" value="0.2"
+                            class="w-full">
                     </div>
                 </div>
                 <div id="host-controls" class="mt-4 hidden">
-                     <div class="mb-4">
+                    <div class="space-y-2 mb-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-semibold">AI API Status</span>
+                            <div class="flex items-center gap-2">
+                                <span id="api-status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-gray-500"></span>
+                                <span id="api-status-text" class="text-xs text-gray-300">Not checked</span>
+                            </div>
+                        </div>
+                        <button id="test-api-btn" class="game-button w-full py-1.5">Test API</button>
+                    </div>
+                    <div class="mb-4">
                         <label class="block text-sm font-semibold mb-1">Share Link:</label>
                         <div class="flex">
                             <input type="text" id="share-link" class="w-full p-2 rounded-l-md text-xs" readonly>
@@ -102,7 +141,8 @@
                     </div>
                     <div class="space-y-2">
                         <label class="text-sm">Master Music Volume</label>
-                        <input type="range" id="host-music-volume-slider" min="0" max="1" step="0.01" value="0.2" class="w-full">
+                        <input type="range" id="host-music-volume-slider" min="0" max="1" step="0.01" value="0.2"
+                            class="w-full">
                     </div>
                     <button id="start-game-btn" class="game-button w-full py-2 px-4 rounded-lg mt-4">Start Game</button>
                 </div>
@@ -110,17 +150,21 @@
         </div>
 
         <!-- Center Panel: Game Area -->
-        <div class="flex-grow flex flex-col gap-4">
+        <div class="flex-grow flex flex-col gap-4 h-[50vh] lg:h-auto">
             <div class="panel p-4 text-center">
                 <div id="game-status" class="text-xl font-semibold h-8">Waiting to start...</div>
                 <div id="word-display" class="text-3xl font-bold mt-1 h-12"></div>
                 <div id="ai-image-display" class="mt-2 hidden max-h-48 mx-auto">
                     <img id="ai-image" class="max-h-48 rounded-lg mx-auto" />
                 </div>
+                <div id="ai-ascii-display" class="mt-2 hidden max-h-64 overflow-auto mx-auto bg-black/40 rounded-lg p-3">
+                    <pre id="ai-ascii" class="whitespace-pre-wrap leading-4 text-xs"></pre>
+                </div>
             </div>
             <div id="canvas-container" class="panel p-2 flex-grow relative">
                 <canvas id="drawing-canvas"></canvas>
-                <div id="artist-tools" class="absolute top-2 right-2 flex flex-col gap-2 bg-gray-800/50 p-2 rounded-lg hidden">
+                <div id="artist-tools"
+                    class="absolute top-2 right-2 flex flex-col gap-2 bg-gray-800/50 p-2 rounded-lg hidden">
                     <input type="color" id="color-picker" value="#FFFFFF" class="w-10 h-10 rounded-md">
                     <input type="range" id="brush-size" min="1" max="20" value="3" class="w-20">
                     <button id="eraser-btn" class="tool-btn p-2 rounded-md">Eraser</button>
@@ -145,7 +189,8 @@
         <div class="modal-content p-8 rounded-lg text-center max-w-md">
             <h1 class="text-3xl font-bold mb-4" data-translate-key="title">Sketchy Signals</h1>
             <div class="space-y-4">
-                <input type="text" id="player-name-input" placeholder="Enter your name" class="p-2 w-full text-center" data-translate-key="namePlaceholder">
+                <input type="text" id="player-name-input" placeholder="Enter your name" class="p-2 w-full text-center"
+                    data-translate-key="namePlaceholder">
                 <select id="language-select" class="p-2 w-full">
                     <option value="en">English</option>
                     <option value="es">Español</option>
@@ -156,13 +201,14 @@
                 </select>
                 <select id="gamemode-select" class="p-2 w-full">
                     <option value="word" data-translate-key="modeWord">Classic: Draw a Word</option>
-                    <option value="ai_image" data-translate-key="modeAI">AI Mode: Guess the Image</option>
+                    <option value="ai_image" data-translate-key="modeAI">AI Mode: Guess the ASCII Art</option>
                 </select>
-                <button id="join-game-btn" class="game-button w-full py-2 px-4 rounded-lg" data-translate-key="joinButton">Join Game</button>
+                <button id="join-game-btn" class="game-button w-full py-2 px-4 rounded-lg"
+                    data-translate-key="joinButton">Join Game</button>
             </div>
         </div>
     </div>
-    
+
     <div id="audio-container" class="hidden"></div>
 
     <script type="module">
@@ -202,6 +248,13 @@
         const muteMusicBtn = document.getElementById('mute-music-btn');
         const themeToggleBtn = document.getElementById('theme-toggle-btn');
 
+        // --- New AI UI Elements ---
+        const aiAsciiDisplay = document.getElementById('ai-ascii-display');
+        const aiAscii = document.getElementById('ai-ascii');
+        const testApiBtn = document.getElementById('test-api-btn');
+        const apiStatusDot = document.getElementById('api-status-dot');
+        const apiStatusText = document.getElementById('api-status-text');
+
         // --- Game State & Config ---
         let peer, myPeerId, roomId, isHost, connections = {};
         let playerName = '';
@@ -210,35 +263,37 @@
         let lastX = 0, lastY = 0;
         let currentBrushSize = 3, currentColor = '#FFFFFF', isErasing = false;
         let localStream, isMuted = false;
-        let audioNodes = {};
         let musicPlayer;
+        let myLanguage = 'en'; // Each client’s local UI language
 
         // --- Multi-language Content ---
         const translations = {
-            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Guess the Image" },
-            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Adivina la Imagen" },
-            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Devinez l'image" },
-            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: 이미지 추측" },
-            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜图" },
-            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: छवि का अनुमान लगाएं" },
+            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Guess the ASCII Art" },
+            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Adivina el Arte ASCII" },
+            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Devinez l'art ASCII" },
+            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: ASCII 아트 추측" },
+            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜ASCII艺术" },
+            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: ASCII कला का अनुमान लगाएं" },
         };
-        const wordLists = {
-            en: ["house", "dog", "sun", "car", "tree", "book", "computer", "guitar", "pizza", "coffee", "bicycle", "flower", "moon", "star", "bridge", "river", "mountain", "cloud", "rain", "hat", "boat", "key", "door", "window"],
-            es: ["casa", "perro", "sol", "coche", "árbol", "libro", "computadora", "guitarra", "pizza", "café", "bicicleta", "flor", "luna", "estrella", "puente", "río", "montaña", "nube", "lluvia", "sombrero", "barco", "llave", "puerta", "ventana"],
-            fr: ["maison", "chien", "soleil", "voiture", "arbre", "livre", "ordinateur", "guitare", "pizza", "café", "vélo", "fleur", "lune", "étoile", "pont", "rivière", "montagne", "nuage", "pluie", "chapeau", "bateau", "clé", "porte", "fenêtre"],
-            ko: ["집", "개", "해", "차", "나무", "책", "컴퓨터", "기타", "피자", "커피", "자전거", "꽃", "달", "별", "다리", "강", "산", "구름", "비", "모자", "배", "열쇠", "문", "창문"],
-            zh: ["房子", "狗", "太阳", "汽车", "树", "书", "电脑", "吉他", "披萨", "咖啡", "自行车", "花", "月亮", "星星", "桥", "河", "山", "云", "雨", "帽子", "船", "钥匙", "门", "窗户"],
-            hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़", "किताब", "कंप्यूटर", "गिटार", "पिज्जा", "कॉफ़ी", "साइकिल", "फूल", "चांद", "तारा", "पुल", "नदी", "पहाड़", "बादल", "बारिश", "टोपी", "नाव", "चाबी", "दरवाजा", "खिड़की"],
+        const wordLists = { // Fallback word list
+            en: ["house", "dog", "sun", "car", "tree"], es: ["casa", "perro", "sol", "coche", "árbol"], fr: ["maison", "chien", "soleil", "voiture", "arbre"], ko: ["집", "개", "해", "차", "나무"], zh: ["房子", "狗", "太阳", "汽车", "树"], hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़"],
         };
 
         // --- Sound Effects ---
         const correctSound = () => new Tone.Synth().toDestination().triggerAttackRelease("C5", "8n");
         const turnStartSound = () => new Tone.Synth().toDestination().triggerAttackRelease("G4", "8n");
 
+        // --- Helper Functions ---
+        function maskWord(word) {
+            if (!word) return '';
+            // Reveal spaces/punctuation, mask letters/ideographs with underscores
+            return Array.from(word).map(ch => /\p{L}|\p{Number}/u.test(ch) ? '_' : ch).join(' ');
+        }
+
         // --- PeerJS Setup ---
         function initializePeer(id) {
             myPeerId = id;
-            peer = new Peer(myPeerId, { host: '0.peerjs.com', port: 443, secure: true });
+            peer = new Peer(myPeerId, { host: '0.peerjs.com', port: 443, secure: true, debug: 1 });
             peer.on('open', () => {
                 if (isHost) {
                     const url = new URL(window.location.href);
@@ -253,7 +308,7 @@
         }
 
         function connectToHost() {
-            const conn = peer.connect(roomId, { metadata: { name: playerName }, reliable: true });
+            const conn = peer.connect(roomId, { metadata: { name: playerName, lang: myLanguage }, reliable: true });
             setupConnection(conn);
         }
 
@@ -262,22 +317,18 @@
             conn.on('open', () => {
                 if (isHost) {
                     if (Object.keys(gameState.players).length < 10) {
-                        gameState.players[conn.peer] = { name: conn.metadata.name, score: 0, isMuted: false };
+                        gameState.players[conn.peer] = { name: conn.metadata.name, score: 0, isMuted: false, lang: conn.metadata.lang };
                         updateUI();
                         broadcast({ type: 'gameState', state: gameState });
                     }
                 }
-                 if (localStream) {
+                if (localStream) {
                     peer.call(conn.peer, localStream);
                 }
             });
             conn.on('data', handleData);
             conn.on('close', () => {
                 delete connections[conn.peer];
-                if (audioNodes[conn.peer]) {
-                    audioNodes[conn.peer].source.disconnect();
-                    delete audioNodes[conn.peer];
-                }
                 const audioEl = document.getElementById(`audio-${conn.peer}`);
                 if (audioEl) audioEl.remove();
 
@@ -290,36 +341,34 @@
         }
 
         function handleData(data) {
+            // Host handles game logic and broadcasts state
             if (isHost) {
                 switch (data.type) {
                     case 'guess':
                         handleGuess(data.peerId, data.guess);
                         break;
                     case 'draw':
-                        broadcast(data, data.peerId); 
+                        broadcast(data, data.peerId);
                         drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                         broadcast(data, data.peerId);
                         break;
-                    case 'remoteMute':
-                         if (gameState.players[data.targetPeerId]) {
-                            gameState.players[data.targetPeerId].isMuted = data.isMuted;
-                            connections[data.targetPeerId]?.send({type: 'forceMute', isMuted: data.isMuted});
-                            updateUI();
-                            broadcast({type: 'gameState', state: gameState});
-                        }
-                        break;
                     case 'musicVolume':
                         broadcast(data);
                         break;
                 }
-            } else {
+            } else { // Guests receive and apply state changes
                 switch (data.type) {
                     case 'gameState':
+                        const wasRoundActive = gameState.isRoundActive;
                         gameState = data.state;
+                        // Redraw canvas if game state includes drawing data (future improvement)
                         updateUI();
+                        if (!wasRoundActive && gameState.isRoundActive) {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        }
                         break;
                     case 'draw':
                         drawLine(data.x0, data.y0, data.x1, data.y1, data.color, data.size, false);
@@ -334,11 +383,6 @@
                     case 'chat':
                         addChatMessage(data.senderName, data.message, data.isCorrect);
                         break;
-                    case 'forceMute':
-                        isMuted = data.isMuted;
-                        if(localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
-                        updateMuteButtonUI();
-                        break;
                     case 'musicVolume':
                         if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(data.volume);
                         break;
@@ -348,7 +392,7 @@
 
         function broadcast(data, excludePeer = null) {
             Object.values(connections).forEach(conn => {
-                 if (conn.peer !== excludePeer) {
+                if (conn.peer !== excludePeer) {
                     conn.send(data);
                 }
             });
@@ -361,12 +405,12 @@
                 currentRound: 0,
                 totalRounds: 10,
                 currentArtistPeerId: null,
-                secretWord: '',
                 secretWordSet: {},
                 isRoundActive: false,
                 language: 'en',
                 gameMode: 'word',
-                wordLists: null
+                wordLists: null,
+                aiAscii: null,
             };
         }
 
@@ -375,24 +419,26 @@
             const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
             if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
                 gameState.isRoundActive = false;
-                
+
                 if (gameState.gameMode === 'ai_image') {
                     gameState.players[peerId].score += 15;
                 } else {
                     gameState.players[peerId].score += 10;
-                    gameState.players[gameState.currentArtistPeerId].score += 5;
+                    if(gameState.players[gameState.currentArtistPeerId]) {
+                        gameState.players[gameState.currentArtistPeerId].score += 5;
+                    }
                 }
-                
-                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWordSet[gameState.language]})`;
+
+                const correctMessage = `${guesserName} guessed the word! (${gameState.secretWordSet.en})`;
                 addChatMessage('System', correctMessage, true);
                 broadcast({ type: 'chat', senderName: 'System', message: correctMessage, isCorrect: true });
-                
+
                 correctSound();
                 broadcast({ type: 'playSound', sound: 'correct' });
-                
+
                 updateUI();
                 broadcast({ type: 'gameState', state: gameState });
-                
+
                 setTimeout(startNextRound, 3000);
             } else {
                 addChatMessage(guesserName, guess, false);
@@ -404,46 +450,39 @@
             if (isHost) {
                 gameState.totalRounds = Object.keys(gameState.players).length * 2;
                 gameState.currentRound++;
-                
+                gameState.aiAscii = null; // Reset ASCII art
+
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 broadcast({ type: 'clearCanvas' });
 
                 if (gameState.currentRound > gameState.totalRounds || Object.keys(gameState.players).length < 2) {
-                    const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
                     gameState.isRoundActive = false;
-                    
-                    const gameOverMsg = `Game Over! Winner is ${winner ? winner.name : 'nobody'}!`;
-                    addChatMessage('System', gameOverMsg, true);
-                    broadcast({ type: 'chat', senderName: 'System', message: gameOverMsg, isCorrect: true });
-                    
                     updateUI();
                     broadcast({ type: 'gameState', state: gameState });
-
                     startGameBtn.classList.remove('hidden');
                     return;
                 }
 
                 const playerIds = Object.keys(gameState.players);
                 gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
-                
+
                 if (!gameState.wordLists) {
                     gameState.wordLists = await getWordsFromGemini(20);
                 }
-                
+
                 const wordIndex = Math.floor(Math.random() * gameState.wordLists.en.length);
                 gameState.secretWordSet = {};
                 for (const lang in gameState.wordLists) {
                     gameState.secretWordSet[lang] = gameState.wordLists[lang][wordIndex];
                 }
-                gameState.secretWord = gameState.secretWordSet[gameState.language];
-
 
                 if (gameState.gameMode === 'ai_image') {
-                    const base64Data = await generateAIImage(gameState.secretWord);
-                    if (base64Data) {
+                    const ascii = await generateAsciiArt(gameState.secretWordSet.en);
+                    if (ascii) {
                         gameState.isRoundActive = true;
-                        gameState.aiImageBase64 = base64Data;
+                        gameState.aiAscii = ascii;
                     } else {
+                        // Graceful fallback to Classic
                         gameState.gameMode = 'word';
                         gameState.isRoundActive = true;
                     }
@@ -460,88 +499,137 @@
 
         // --- Gemini API Calls ---
         async function checkApiKey() {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo"; // API key will be provided by the environment
             if (!apiKey) return false;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             try {
-                const response = await fetch(apiUrl, {
+                const r = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: "hello" }] }] })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
                 });
-                return response.ok;
-            } catch (error) {
+                return r.ok;
+            } catch {
                 return false;
             }
         }
 
+        function updateApiIndicator(ok) {
+            if (!apiStatusDot || !apiStatusText) return;
+            apiStatusDot.classList.remove('bg-gray-500', 'bg-red-500', 'bg-green-500', 'bg-yellow-500');
+            if (ok === true) {
+                apiStatusDot.classList.add('bg-green-500');
+                apiStatusText.textContent = 'Connected';
+            } else if (ok === false) {
+                apiStatusDot.classList.add('bg-red-500');
+                apiStatusText.textContent = 'Disconnected';
+            } else {
+                apiStatusDot.classList.add('bg-yellow-500');
+                apiStatusText.textContent = 'Checking...';
+            }
+        }
+        
         async function getWordsFromGemini(count) {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
+            const apiKey = ""; // API key will be provided by the environment
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
             const payload = {
-                contents: [{ parts: [{ text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.` }] }],
+                contents: [{
+                    parts: [{
+                        text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.`
+                    }]
+                }],
                 generationConfig: {
                     responseMimeType: "application/json",
                     responseSchema: {
                         type: "OBJECT",
                         properties: {
-                            "en": { "type": "ARRAY", "items": { "type": "STRING" } },
-                            "es": { "type": "ARRAY", "items": { "type": "STRING" } },
-                            "fr": { "type": "ARRAY", "items": { "type": "STRING" } },
-                            "ko": { "type": "ARRAY", "items": { "type": "STRING" } },
-                            "zh": { "type": "ARRAY", "items": { "type": "STRING" } },
-                            "hi": { "type": "ARRAY", "items": { "type": "STRING" } }
+                            "en": { type: "ARRAY", items: { type: "STRING" } },
+                            "es": { type: "ARRAY", items: { type: "STRING" } },
+                            "fr": { type: "ARRAY", items: { type: "STRING" } },
+                            "ko": { type: "ARRAY", items: { type: "STRING" } },
+                            "zh": { type: "ARRAY", items: { type: "STRING" } },
+                            "hi": { type: "ARRAY", items: { type: "STRING" } }
                         }
                     }
                 }
             };
+
             try {
                 const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
-                if (!response.ok) return wordLists;
+
+                if (!response.ok) throw new Error("Gemini API error: " + response.status);
+
                 const result = await response.json();
-                const text = result.candidates[0].content.parts[0].text;
-                return JSON.parse(text);
+                
+                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    return JSON.parse(result.candidates[0].content.parts[0].text);
+                }
+
+                throw new Error("Unexpected Gemini response format");
             } catch (error) {
-                console.error("Gemini word generation failed, using fallback list.", error);
-                return wordLists;
+                console.error("Error fetching words:", error);
+                return wordLists; // fallback to local default word list
             }
         }
 
-        async function generateAIImage(prompt) {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
-            const payload = { instances: [{ prompt: `A simple, clear, cartoon-style drawing of: ${prompt}` }], parameters: { "sampleCount": 1 } };
+        async function generateAsciiArt(prompt) {
+            const apiKey = ""; // API key will be provided by the environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            const systemHint = `Create small, recognizable ASCII art using only text characters. Keep it simple (max ~25 lines), no code fences. Subject: "${prompt}".`;
 
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: systemHint }] }],
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 400
+                        }
+                    })
                 });
                 if (!response.ok) throw new Error(`API error: ${response.statusText}`);
                 const result = await response.json();
-                return result.predictions[0].bytesBase64Encoded;
-            } catch (error) {
-                console.error("Gemini API call failed:", error);
+                const text = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+                return text || null;
+            } catch (e) {
+                console.error('ASCII art generation failed', e);
                 return null;
             }
         }
-        
+
         // --- Drawing Logic ---
         function resizeCanvas() {
             const container = document.getElementById('canvas-container');
             if (container.clientWidth > 0 && container.clientHeight > 0) {
+                // Save current canvas content
+                let imageData = null;
+                try {
+                    imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                } catch (e) {
+                    console.error("Could not get image data from canvas, it might be tainted.", e);
+                }
+
+                // Resize canvas
                 canvas.width = container.clientWidth;
                 canvas.height = container.clientHeight;
+
+                // Restore canvas content
+                if (imageData) {
+                    ctx.putImageData(imageData, 0, 0);
+                }
             }
         }
 
         function startDrawing(e) {
-            if (myPeerId !== gameState.currentArtistPeerId) return;
+            if (myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
+            e.preventDefault();
             drawing = true;
             const coords = getEventCoords(e);
             [lastX, lastY] = [coords.x, coords.y];
@@ -552,19 +640,21 @@
         }
 
         function draw(e) {
-            if (!drawing || myPeerId !== gameState.currentArtistPeerId) return;
+            if (!drawing || myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
+            e.preventDefault();
             const coords = getEventCoords(e);
             const drawData = {
                 type: 'draw',
                 peerId: myPeerId,
                 x0: lastX / canvas.width, y0: lastY / canvas.height,
                 x1: coords.x / canvas.width, y1: coords.y / canvas.height,
-                color: currentColor, size: currentBrushSize
+                color: isErasing ? getComputedStyle(document.body).getPropertyValue('--bg-secondary') : currentColor, 
+                size: currentBrushSize
             };
-            
-            drawLine(lastX, lastY, coords.x, coords.y, currentColor, currentBrushSize, true);
-            
-            if(isHost) {
+
+            drawLine(lastX, lastY, coords.x, coords.y, drawData.color, currentBrushSize, true);
+
+            if (isHost) {
                 broadcast(drawData, myPeerId);
             } else {
                 connections[roomId]?.send(drawData);
@@ -581,7 +671,7 @@
             ctx.lineTo(isLocal ? x1 : x1 * canvas.width, isLocal ? y1 : y1 * canvas.height);
             ctx.stroke();
         }
-        
+
         function getEventCoords(e) {
             const rect = canvas.getBoundingClientRect();
             const event = e.touches ? e.touches[0] : e;
@@ -594,52 +684,37 @@
             Object.entries(gameState.players).forEach(([peerId, p]) => {
                 const div = document.createElement('div');
                 div.className = `p-2 rounded-lg flex justify-between items-center ${peerId === gameState.currentArtistPeerId ? 'bg-blue-500/50' : ''}`;
-                
-                let muteIcon = '';
-                if (isHost && peerId !== myPeerId) {
-                    muteIcon = `<button data-peerid="${peerId}" class="mute-toggle-btn text-xs">${p.isMuted ? 'Unmute' : 'Mute'}</button>`;
-                } else if (p.isMuted) {
-                    muteIcon = '<span>🔇</span>';
-                }
-
-                div.innerHTML = `<span>${p.name} ${peerId === gameState.currentArtistPeerId ? '✏️' : ''}</span><div class="flex items-center gap-2"><span class="font-bold">${p.score}</span>${muteIcon}</div>`;
+                div.innerHTML = `<span>${p.name} ${peerId === gameState.currentArtistPeerId && gameState.gameMode !== 'ai_image' ? '✏️' : ''}</span><span class="font-bold">${p.score}</span>`;
                 playerListDiv.appendChild(div);
-            });
-            
-            document.querySelectorAll('.mute-toggle-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const targetPeerId = e.target.dataset.peerid;
-                    const player = gameState.players[targetPeerId];
-                    if (player) {
-                        const newMuteState = !player.isMuted;
-                        if (isHost) {
-                            connections[targetPeerId]?.send({ type: 'forceMute', isMuted: newMuteState });
-                            player.isMuted = newMuteState;
-                            updateUI();
-                            broadcast({ type: 'gameState', state: gameState });
-                        }
-                    }
-                });
             });
 
             const isArtist = myPeerId === gameState.currentArtistPeerId;
             artistTools.classList.toggle('hidden', !isArtist || gameState.gameMode === 'ai_image');
+            
+            // Default: hide visual areas
             aiImageDisplay.classList.add('hidden');
+            aiAsciiDisplay.classList.add('hidden');
 
             if (gameState.isRoundActive) {
+                // Pick the viewer’s language word
+                const viewerWord = gameState.secretWordSet?.[myLanguage];
+
                 if (gameState.gameMode === 'ai_image') {
-                    gameStatus.textContent = "Guess the prompt for the image!";
-                    wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
-                    if (gameState.aiImageBase64) {
-                        aiImage.src = `data:image/png;base64,${gameState.aiImageBase64}`;
-                        aiImageDisplay.classList.remove('hidden');
+                    gameStatus.textContent = "Guess the prompt!";
+                    wordDisplay.textContent = viewerWord ? maskWord(viewerWord) : '';
+                    if (gameState.aiAscii) {
+                        aiAscii.textContent = gameState.aiAscii;
+                        aiAsciiDisplay.classList.remove('hidden');
                     }
                 } else {
-                    gameStatus.textContent = isArtist ? "Your turn to draw!" : `Guess what ${gameState.players[gameState.currentArtistPeerId]?.name} is drawing!`;
                     if (isArtist) {
-                        wordDisplay.textContent = gameState.secretWord;
+                        // Artist sees the word in *their* language
+                        gameStatus.textContent = "Your turn to draw!";
+                        wordDisplay.textContent = viewerWord || '';
                     } else {
-                        wordDisplay.textContent = gameState.secretWord.replace(/\S/g, '_ ');
+                        const artistName = gameState.players[gameState.currentArtistPeerId]?.name;
+                        gameStatus.textContent = artistName ? `Guess what ${artistName} is drawing!` : "Guess what's being drawn!";
+                        wordDisplay.textContent = viewerWord ? maskWord(viewerWord) : '';
                     }
                 }
             } else {
@@ -651,7 +726,7 @@
                 }
                 wordDisplay.textContent = "";
             }
-            
+
             startGameBtn.disabled = Object.keys(gameState.players).length < 2;
         }
 
@@ -666,11 +741,12 @@
             chatMessages.appendChild(msgDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
-        
+
         function setLanguage(lang) {
+            myLanguage = lang;
             document.querySelectorAll('[data-translate-key]').forEach(el => {
                 const key = el.dataset.translateKey;
-                if (translations[lang][key]) {
+                if (translations[lang] && translations[lang][key]) {
                     if (el.tagName === 'INPUT') el.placeholder = translations[lang][key];
                     else el.textContent = translations[lang][key];
                 }
@@ -681,45 +757,47 @@
 
         joinGameBtn.addEventListener('click', async () => {
             playerName = playerNameInput.value.trim();
-            if (playerName) {
-                
-                const selectedMode = gamemodeSelect.value;
-                if (isHost && selectedMode === 'ai_image') {
-                    const keyIsValid = await checkApiKey();
-                    if (!keyIsValid) {
-                        alert("Could not connect to AI service. Please check your API key or select Classic Mode.");
-                        gamemodeSelect.value = 'word';
-                        return;
-                    }
-                }
-                
-                await Tone.start();
-                setupModal.classList.add('hidden');
-                gameContainer.classList.remove('hidden');
-                resizeCanvas();
-
-                const hash = window.location.hash.substring(1);
-                isHost = !hash;
-
-                if (isHost) {
-                    myPeerId = `host-${Date.now()}`;
-                    gameState.language = languageSelect.value;
-                    gameState.gameMode = selectedMode;
-                    gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false };
-                    hostControls.classList.remove('hidden');
-                } else {
-                    myPeerId = `guest-${Date.now()}`;
-                    [roomId, gameState.language, gameState.gameMode] = hash.split('_');
-                }
-                
-                initializePeer(myPeerId);
-                updateUI();
-                initializeMusic();
+            if (!playerName) {
+                playerNameInput.focus();
+                return;
             }
+            
+            await Tone.start();
+            setupModal.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            resizeCanvas();
+            
+            const hash = window.location.hash.substring(1);
+            isHost = !hash;
+            
+            // IMPORTANT: everyone keeps their own UI language locally
+            myLanguage = languageSelect.value;
+            setLanguage(myLanguage);
+            
+            const selectedMode = gamemodeSelect.value;
+
+            if (isHost) {
+                myPeerId = `host-${Date.now()}`;
+                gameState.language = myLanguage; // Host sets initial game language
+                gameState.gameMode = selectedMode;
+                gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false, lang: myLanguage };
+                hostControls.classList.remove('hidden');
+                // Ping API once for host if AI mode is selected
+                if (selectedMode === 'ai_image') {
+                    updateApiIndicator(await checkApiKey());
+                }
+            } else {
+                myPeerId = `guest-${Date.now()}`;
+                [roomId, gameState.language, gameState.gameMode] = hash.split('_'); // Room defaults
+            }
+            
+            initializePeer(myPeerId);
+            updateUI();
+            initializeMusic();
         });
-        
+
         startGameBtn.addEventListener('click', () => {
-            if(isHost) {
+            if (isHost) {
                 gameState.currentRound = 0;
                 Object.values(gameState.players).forEach(p => p.score = 0);
                 startNextRound();
@@ -736,8 +814,8 @@
             const guess = guessInput.value.trim();
             if (guess) {
                 const isArtist = myPeerId === gameState.currentArtistPeerId;
-                if (gameState.gameMode === 'word' && isArtist) return;
-                
+                if (gameState.gameMode === 'word' && isArtist && Object.keys(gameState.players).length > 1) return;
+
                 const data = { type: 'guess', peerId: myPeerId, guess };
                 if (isHost) {
                     handleGuess(myPeerId, guess);
@@ -759,10 +837,17 @@
         canvas.addEventListener('touchend', stopDrawing, { passive: false });
         canvas.addEventListener('touchmove', draw, { passive: false });
         window.addEventListener('resize', resizeCanvas);
-        
-        colorPicker.addEventListener('change', (e) => { currentColor = e.target.value; isErasing = false; });
+
+        colorPicker.addEventListener('input', (e) => { 
+            currentColor = e.target.value; 
+            isErasing = false; 
+            eraserBtn.classList.remove('active');
+        });
         brushSizeSlider.addEventListener('input', (e) => { currentBrushSize = e.target.value; });
-        eraserBtn.addEventListener('click', () => { isErasing = true; currentColor = '#1a1a2e'; });
+        eraserBtn.addEventListener('click', () => { 
+            isErasing = !isErasing;
+            eraserBtn.classList.toggle('active', isErasing);
+        });
         clearBtn.addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const clearData = { type: 'clearCanvas', peerId: myPeerId };
@@ -773,14 +858,42 @@
             }
         });
 
+        // --- API Controls ---
+        if (testApiBtn) {
+            testApiBtn.addEventListener('click', async () => {
+                updateApiIndicator(undefined); // Checking...
+                const ok = await checkApiKey();
+                updateApiIndicator(ok);
+            });
+        }
+        
+        gamemodeSelect.addEventListener('change', async (e) => {
+            if (!isHost) return;
+            const newMode = e.target.value;
+            if (newMode === 'ai_image') {
+                updateApiIndicator(undefined);
+                const ok = await checkApiKey();
+                updateApiIndicator(ok);
+                if (!ok) {
+                    // Using a custom modal/alert in the future would be better
+                    alert("AI service unavailable. Falling back to Classic.");
+                    gamemodeSelect.value = 'word';
+                    gameState.gameMode = 'word';
+                } else {
+                    gameState.gameMode = 'ai_image';
+                }
+            } else {
+                gameState.gameMode = 'word';
+            }
+            broadcast({ type: 'gameState', state: gameState });
+        });
+
         // Voice Chat Listeners
         joinVoiceBtn.addEventListener('click', async () => {
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }});
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                });
                 joinVoiceBtn.classList.add('hidden');
                 callControls.classList.remove('hidden');
                 Object.values(connections).forEach(conn => peer.call(conn.peer, localStream));
@@ -791,12 +904,12 @@
 
         muteBtn.addEventListener('click', () => {
             isMuted = !isMuted;
-            localStream.getAudioTracks()[0].enabled = !isMuted;
+            if(localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
             updateMuteButtonUI();
         });
 
         endCallBtn.addEventListener('click', () => {
-            localStream.getTracks().forEach(track => track.stop());
+            if(localStream) localStream.getTracks().forEach(track => track.stop());
             localStream = null;
             Object.values(peer.connections).forEach(connArray => {
                 connArray.forEach(conn => {
@@ -810,58 +923,23 @@
         function handleIncomingCall(call) {
             call.answer(localStream);
             call.on('stream', remoteStream => {
-                setupAudioProcessing(call.peer, remoteStream);
+                const audioEl = document.createElement('audio');
+                audioEl.srcObject = remoteStream;
+                audioEl.autoplay = true;
+                audioEl.id = `audio-${call.peer}`;
+                audioContainer.appendChild(audioEl);
             });
         }
 
-        function setupAudioProcessing(peerId, remoteStream) {
-            const audioContext = Tone.context;
-            const source = audioContext.createMediaStreamSource(remoteStream);
-            const compressor = new Tone.Compressor(-12, 4);
-            const meter = new Tone.Meter();
-            const volume = new Tone.Volume(0).toDestination();
-
-            audioNodes[peerId] = { source, compressor, meter, volume, feedbackWarningCount: 0 };
-            source.connect(compressor);
-            compressor.connect(volume);
-            volume.connect(meter);
-        }
-        
-        function monitorAudioFeedback() {
-            if (!isHost) return;
-            Object.entries(audioNodes).forEach(([peerId, node]) => {
-                const level = node.meter.getValue();
-                if (level > -6) {
-                    node.feedbackWarningCount++;
-                } else {
-                    node.feedbackWarningCount = Math.max(0, node.feedbackWarningCount - 1);
-                }
-
-                if (node.feedbackWarningCount > 4 && node.volume.volume.value > -20) {
-                    node.volume.volume.rampTo(-20, 1);
-                }
-                
-                if (node.feedbackWarningCount > 10) {
-                    if (gameState.players[peerId] && !gameState.players[peerId].isMuted) {
-                        gameState.players[peerId].isMuted = true;
-                        connections[peerId]?.send({type: 'forceMute', isMuted: true});
-                        updateUI();
-                        broadcast({type: 'gameState', state: gameState});
-                    }
-                    node.feedbackWarningCount = 0;
-                }
-            });
-        }
-        setInterval(monitorAudioFeedback, 500);
-        
         function updateMuteButtonUI() {
             muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
             muteBtn.classList.toggle('bg-green-500', !isMuted);
             muteBtn.classList.toggle('hover:bg-green-600', !isMuted);
         }
-        
+
         // Music Controls
         function initializeMusic() {
+            if (musicPlayer) return;
             musicPlayer = new Tone.Player({
                 url: "Family Fun Fiesta.mp3",
                 loop: true,
@@ -869,13 +947,13 @@
                 onload: () => musicPlayer.start()
             }).toDestination();
         }
-        
+
         musicVolumeSlider.addEventListener('input', (e) => {
             if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(e.target.value);
         });
-        
+
         muteMusicBtn.addEventListener('click', () => {
-             if (musicPlayer) {
+            if (musicPlayer) {
                 musicPlayer.mute = !musicPlayer.mute;
                 muteMusicBtn.textContent = musicPlayer.mute ? '🔇' : '🔊';
             }
@@ -884,8 +962,8 @@
         hostMusicVolumeSlider.addEventListener('input', (e) => {
             if (isHost) {
                 const volume = e.target.value;
-                 if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(volume);
-                broadcast({type: 'musicVolume', volume: volume});
+                if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(volume);
+                broadcast({ type: 'musicVolume', volume: volume });
             }
         });
 
@@ -897,7 +975,7 @@
             localStorage.setItem('theme', isLight ? 'light' : 'dark');
         });
 
-        // Load saved theme
+        // --- Initial Setup ---
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'light') {
             document.body.classList.add('light-mode');
@@ -905,8 +983,6 @@
         }
 
         setLanguage(languageSelect.value);
-
     </script>
 </body>
 </html>
-�
