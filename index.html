@@ -327,9 +327,22 @@
                 if (audioEl) audioEl.remove();
 
                 if (isHost) {
+                    // MODIFICATION START: Handle player disconnection more robustly
+                    const departingPlayerName = gameState.players[conn.peer]?.name || 'A player';
+                    const wasArtist = gameState.currentArtistPeerId === conn.peer;
+
                     delete gameState.players[conn.peer];
-                    updateUI();
-                    broadcast({ type: 'gameState', state: gameState });
+
+                    if (wasArtist && gameState.isRoundActive) {
+                        const message = `${departingPlayerName} (the artist) left. Skipping to the next round.`;
+                        addChatMessage('System', message, false);
+                        broadcast({ type: 'chat', senderName: 'System', message: message, isCorrect: false });
+                        setTimeout(startNextRound, 2000);
+                    } else {
+                        updateUI();
+                        broadcast({ type: 'gameState', state: gameState });
+                    }
+                    // MODIFICATION END
                 }
             });
         }
@@ -342,7 +355,6 @@
                         break;
                     case 'draw':
                         broadcast(data, data.peerId);
-                        // **MODIFICATION START**
                         let receivedColorForHost = data.color;
                         const hostTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
                         if (data.senderTheme && data.senderTheme !== hostTheme) {
@@ -353,7 +365,6 @@
                             }
                         }
                         drawLine(data.x0, data.y0, data.x1, data.y1, receivedColorForHost, data.size, false);
-                        // **MODIFICATION END**
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -374,7 +385,6 @@
                         }
                         break;
                     case 'draw':
-                        // **MODIFICATION START**
                         let receivedColor = data.color;
                         const myTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
                         if (data.senderTheme && data.senderTheme !== myTheme) {
@@ -385,7 +395,6 @@
                             }
                         }
                         drawLine(data.x0, data.y0, data.x1, data.y1, receivedColor, data.size, false);
-                        // **MODIFICATION END**
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -495,7 +504,8 @@
                 gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
 
                 if (!gameState.wordLists) {
-                    gameState.wordLists = await getWordsFromGemini(20);
+                    // MODIFICATION: Increased word count for more variety
+                    gameState.wordLists = await getWordsFromGemini(50);
                 }
 
                 const wordIndex = Math.floor(Math.random() * gameState.wordLists.en.length);
@@ -563,7 +573,8 @@
             const payload = {
                 contents: [{
                     parts: [{
-                        text: `Give me a JSON object. The keys should be "en", "es", "fr", "ko", "zh", "hi". The value for each key should be an array of ${count} simple, common, drawable nouns. Ensure that the word at each index across the arrays are direct translations of each other.`
+                        // MODIFICATION: Updated prompt for better vocabulary
+                        text: `Give me a JSON object. The keys are "en", "es", "fr", "ko", "zh", "hi". The value for each key must be an array of ${count} moderately difficult, drawable nouns. The words should come from diverse categories (e.g., objects, animals, concepts, actions, places). Ensure the words at each index are direct translations of each other.`
                     }]
                 }],
                 generationConfig: {
@@ -674,9 +685,7 @@
                 x1: coords.x / canvas.width, y1: coords.y / canvas.height,
                 color: isErasing ? getComputedStyle(document.body).getPropertyValue('--bg-secondary') : currentColor,
                 size: currentBrushSize,
-                // **MODIFICATION START**
                 senderTheme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
-                // **MODIFICATION END**
             };
 
             drawLine(lastX, lastY, coords.x, coords.y, drawData.color, currentBrushSize, true);
@@ -782,7 +791,6 @@
             const isLight = document.body.classList.contains('light-mode');
             const newColor = isLight ? '#000000' : '#FFFFFF';
             
-            // Only change the color if it's currently a default, to avoid overriding user's choice
             if (currentColor === '#FFFFFF' || currentColor === '#000000' || !currentColor) {
                 currentColor = newColor;
                 colorPicker.value = newColor;
@@ -909,7 +917,6 @@
                 const ok = await checkApiKey();
                 updateApiIndicator(ok);
                 if (!ok) {
-                    // Using a custom modal/alert in the future would be better
                     alert("AI service unavailable. Falling back to Classic.");
                     gamemodeSelect.value = 'word';
                     gameState.gameMode = 'word';
@@ -1005,10 +1012,8 @@
         themeToggleBtn.addEventListener('click', () => {
             document.body.classList.toggle('light-mode');
             const isLight = document.body.classList.contains('light-mode');
-            // Show moon in light mode, sun in dark mode
             themeToggleBtn.textContent = isLight ? '🌙' : '☀️';
             localStorage.setItem('theme', isLight ? 'light' : 'dark');
-            // Update the default color picker value
             updateDefaultDrawingColor();
         });
 
