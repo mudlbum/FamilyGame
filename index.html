@@ -126,7 +126,8 @@
                         <div class="flex items-center justify-between">
                             <span class="text-sm font-semibold">AI API Status</span>
                             <div class="flex items-center gap-2">
-                                <span id="api-status-dot" class="inline-block w-2.5 h-2.5 rounded-full bg-gray-500"></span>
+                                <span id="api-status-dot"
+                                    class="inline-block w-2.5 h-2.5 rounded-full bg-gray-500"></span>
                                 <span id="api-status-text" class="text-xs text-gray-300">Not checked</span>
                             </div>
                         </div>
@@ -156,7 +157,8 @@
                 <div id="ai-image-display" class="mt-2 hidden max-h-48 mx-auto">
                     <img id="ai-image" class="max-h-48 rounded-lg mx-auto" />
                 </div>
-                <div id="ai-ascii-display" class="mt-2 hidden max-h-64 overflow-auto mx-auto bg-black/40 rounded-lg p-3">
+                <div id="ai-ascii-display"
+                    class="mt-2 hidden max-h-64 overflow-auto mx-auto bg-black/40 rounded-lg p-3">
                     <pre id="ai-ascii" class="whitespace-pre-wrap leading-4 text-xs"></pre>
                 </div>
             </div>
@@ -174,10 +176,12 @@
 
         <div class="panel w-full lg:w-1/4 p-4 flex flex-col flex-shrink-0">
             <h2 class="text-2xl font-bold text-center mb-4">Chat</h2>
-            <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2 min-h-[150px]"></div>
-            <div class="flex gap-2">
-                <input type="text" id="guess-input" placeholder="Type your guess..." class="flex-grow p-2">
-                <button id="send-guess-btn" class="game-button px-4 py-2 rounded-lg">Send</button>
+            <div class="flex-grow flex flex-col">
+                <div id="chat-messages" class="flex-grow overflow-y-auto mb-4 pr-2 min-h-[150px]"></div>
+                <div class="flex gap-2 mt-auto">
+                    <input type="text" id="guess-input" placeholder="Type your guess..." class="flex-grow p-2">
+                    <button id="send-guess-btn" class="game-button px-4 py-2 rounded-lg">Send</button>
+                </div>
             </div>
         </div>
     </div>
@@ -401,7 +405,7 @@
                                 receivedColor = '#FFFFFF';
                             }
                         }
-                        drawLine(data.x0, data.y0, data.x1, data.y1, receivedColor, data.size, false); 
+                        drawLine(data.x0, data.y0, data.x1, data.y1, receivedColor, data.size, false);
                         break;
                     case 'clearCanvas':
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -450,7 +454,7 @@
         function handleGuess(peerId, guess) {
             const guesserName = gameState.players[peerId].name;
             const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
-            
+
             if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
                 gameState.isRoundActive = false;
 
@@ -572,7 +576,7 @@
                 apiStatusText.textContent = 'Checking...';
             }
         }
-        
+
         async function getWordsFromGemini(count) {
             const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
@@ -599,7 +603,7 @@
                 if (!response.ok) throw new Error("Gemini API error: " + response.status);
 
                 const result = await response.json();
-                
+
                 if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
                     // The response is a markdown-formatted JSON string, so we need to clean it.
                     const cleanedText = result.candidates[0].content.parts[0].text.replace(/^```json\s*|```\s*$/g, '');
@@ -655,7 +659,7 @@
             tempCanvas.width = canvas.width;
             tempCanvas.height = canvas.height;
             if (canvas.width > 0 && canvas.height > 0) {
-                 tempCtx.drawImage(canvas, 0, 0);
+                tempCtx.drawImage(canvas, 0, 0);
             }
 
             // Set canvas to fill container
@@ -682,7 +686,7 @@
             if (tempCanvas.width > 0) {
                 ctx.drawImage(tempCanvas, drawable.x, drawable.y, drawable.width, drawable.height);
             }
-            
+
             // Optional: Draw a border to visualize the drawable area
             ctx.strokeStyle = 'rgba(128, 128, 128, 0.2)';
             ctx.strokeRect(drawable.x, drawable.y, drawable.width, drawable.height);
@@ -730,7 +734,7 @@
                 senderTheme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
             };
             // FIX END
-            
+
             // Use local coordinates directly for the drawer's canvas
             const localX0 = lastX + drawable.x;
             const localY0 = lastY + drawable.y;
@@ -746,7 +750,7 @@
             }
             [lastX, lastY] = [coords.x, coords.y];
         }
-        
+
         // FIX START: Updated drawLine to work with both local (pixel) and remote (normalized) coordinates
         function drawLine(x0, y0, x1, y1, color, size, isLocal) {
             ctx.beginPath();
@@ -790,7 +794,7 @@
 
             const isArtist = myPeerId === gameState.currentArtistPeerId;
             artistTools.classList.toggle('hidden', !isArtist || gameState.gameMode === 'ai_image');
-            
+
             aiImageDisplay.classList.add('hidden');
             aiAsciiDisplay.classList.add('hidden');
 
@@ -849,12 +853,12 @@
                 }
             });
         }
-        
+
         // --- NEW: Helper to set default color based on theme ---
         function updateDefaultDrawingColor() {
             const isLight = document.body.classList.contains('light-mode');
             const newColor = isLight ? '#000000' : '#FFFFFF';
-            
+
             if (currentColor === '#FFFFFF' || currentColor === '#000000' || !currentColor) {
                 currentColor = newColor;
                 colorPicker.value = newColor;
@@ -869,18 +873,18 @@
                 playerNameInput.focus();
                 return;
             }
-            
+
             await Tone.start();
             setupModal.classList.add('hidden');
             gameContainer.classList.remove('hidden');
             resizeCanvas();
-            
+
             const hash = window.location.hash.substring(1);
             isHost = !hash;
-            
+
             myLanguage = languageSelect.value;
             setLanguage(myLanguage);
-            
+
             const selectedMode = gamemodeSelect.value;
 
             if (isHost) {
@@ -896,7 +900,7 @@
                 myPeerId = `guest-${Date.now()}`;
                 [roomId, gameState.language, gameState.gameMode] = hash.split('_');
             }
-            
+
             initializePeer(myPeerId);
             updateUI();
             initializeMusic();
@@ -944,13 +948,13 @@
         canvas.addEventListener('touchmove', draw, { passive: false });
         window.addEventListener('resize', resizeCanvas);
 
-        colorPicker.addEventListener('input', (e) => { 
-            currentColor = e.target.value; 
-            isErasing = false; 
+        colorPicker.addEventListener('input', (e) => {
+            currentColor = e.target.value;
+            isErasing = false;
             eraserBtn.classList.remove('active');
         });
         brushSizeSlider.addEventListener('input', (e) => { currentBrushSize = e.target.value; });
-        eraserBtn.addEventListener('click', () => { 
+        eraserBtn.addEventListener('click', () => {
             isErasing = !isErasing;
             eraserBtn.classList.toggle('active', isErasing);
         });
@@ -972,7 +976,7 @@
                 updateApiIndicator(ok);
             });
         }
-        
+
         gamemodeSelect.addEventListener('change', async (e) => {
             if (!isHost) return;
             const newMode = e.target.value;
@@ -1009,12 +1013,12 @@
 
         muteBtn.addEventListener('click', () => {
             isMuted = !isMuted;
-            if(localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
+            if (localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
             updateMuteButtonUI();
         });
 
         endCallBtn.addEventListener('click', () => {
-            if(localStream) localStream.getTracks().forEach(track => track.stop());
+            if (localStream) localStream.getTracks().forEach(track => track.stop());
             localStream = null;
             Object.values(peer.connections).forEach(connArray => {
                 connArray.forEach(conn => {
@@ -1095,4 +1099,5 @@
 
     </script>
 </body>
+
 </html>
