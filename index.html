@@ -65,9 +65,7 @@
 
         #drawing-canvas {
             cursor: crosshair;
-            /* FIX START: Removed 'touch-action: none;' to allow browser to handle multi-touch gestures like scrolling. */
             /* touch-action: none; */
-            /* FIX END */
         }
 
         .tool-btn.active {
@@ -131,7 +129,6 @@
                                 <span id="api-status-text" class="text-xs text-gray-300">Not checked</span>
                             </div>
                         </div>
-                        <button id="test-api-btn" class="game-button w-full py-1.5">Test API</button>
                     </div>
                     <div class="mb-4">
                         <label class="block text-sm font-semibold mb-1">Share Link:</label>
@@ -154,6 +151,7 @@
             <div class="panel p-4 text-center">
                 <div id="game-status" class="text-xl font-semibold h-8">Waiting to start...</div>
                 <div id="word-display" class="text-3xl font-bold mt-1 h-12"></div>
+                <div id="timer-display" class="text-lg font-semibold h-8 text-amber-400"></div>
                 <div id="ai-image-display" class="mt-2 hidden max-h-48 mx-auto">
                     <img id="ai-image" class="max-h-48 rounded-lg mx-auto" />
                 </div>
@@ -225,6 +223,7 @@
         const startGameBtn = document.getElementById('start-game-btn');
         const gameStatus = document.getElementById('game-status');
         const wordDisplay = document.getElementById('word-display');
+        const timerDisplay = document.getElementById('timer-display');
         const aiImageDisplay = document.getElementById('ai-image-display');
         const aiImage = document.getElementById('ai-image');
         const canvas = document.getElementById('drawing-canvas');
@@ -248,11 +247,8 @@
         const hostMusicVolumeSlider = document.getElementById('host-music-volume-slider');
         const muteMusicBtn = document.getElementById('mute-music-btn');
         const themeToggleBtn = document.getElementById('theme-toggle-btn');
-
-        // --- New AI UI Elements ---
         const aiAsciiDisplay = document.getElementById('ai-ascii-display');
         const aiAscii = document.getElementById('ai-ascii');
-        const testApiBtn = document.getElementById('test-api-btn');
         const apiStatusDot = document.getElementById('api-status-dot');
         const apiStatusText = document.getElementById('api-status-text');
 
@@ -262,48 +258,42 @@
         let gameState = createInitialGameState();
         let drawing = false;
         let lastX = 0, lastY = 0;
-        let currentBrushSize = 3, currentColor, isErasing = false; // currentColor is now set dynamically
+        let currentBrushSize = 3, currentColor, isErasing = false;
         let localStream, isMuted = false;
         let musicPlayer;
         let myLanguage = 'en';
+        let roundTimerId = null;
+        let roundTimerIntervalId = null;
 
-        // FIX START: Variables for maintaining a consistent drawing aspect ratio
         const DRAWING_ASPECT_RATIO = 16 / 9;
         let drawable = { x: 0, y: 0, width: 0, height: 0 };
-        // FIX END
 
-        // --- Multi-language Content ---
         const translations = {
-            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Guess the ASCII Art" },
-            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Adivina el Arte ASCII" },
-            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Devinez l'art ASCII" },
-            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: ASCII 아트 추측" },
-            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜ASCII艺术" },
-            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: ASCII कला का अनुमान लगाएं" },
+            en: { title: "Sketchy Signals", namePlaceholder: "Enter your name", joinButton: "Join Game", createButton: "Create Game", modeWord: "Classic: Draw a Word", modeAI: "AI Mode: Guess the ASCII Art" },
+            es: { title: "Señales Esquivas", namePlaceholder: "Ingresa tu nombre", joinButton: "Unirse al Juego", createButton: "Crear Juego", modeWord: "Clásico: Dibuja una Palabra", modeAI: "Modo IA: Adivina el Arte ASCII" },
+            fr: { title: "Signaux Vagues", namePlaceholder: "Entrez votre nom", joinButton: "Rejoindre le jeu", createButton: "Créer le jeu", modeWord: "Classique : Dessiner un mot", modeAI: "Mode IA : Devinez l'art ASCII" },
+            ko: { title: "스케치 시그널", namePlaceholder: "이름을 입력하세요", joinButton: "게임 참가", createButton: "게임 만들기", modeWord: "클래식: 단어 그리기", modeAI: "AI 모드: ASCII 아트 추측" },
+            zh: { title: "模糊信号", namePlaceholder: "输入你的名字", joinButton: "加入游戏", createButton: "创建游戏", modeWord: "经典模式：画一个词", modeAI: "AI模式：猜ASCII艺术" },
+            hi: { title: "धुंधले संकेत", namePlaceholder: "अपना नाम दर्ज करें", joinButton: "खेल में शामिल हों", createButton: "खेल बनाएं", modeWord: "क्लासिक: एक शब्द बनाएं", modeAI: "एआई मोड: ASCII कला का अनुमान लगाएं" },
         };
         const wordLists = {
             en: ["house", "dog", "sun", "car", "tree"], es: ["casa", "perro", "sol", "coche", "árbol"], fr: ["maison", "chien", "soleil", "voiture", "arbre"], ko: ["집", "개", "해", "차", "나무"], zh: ["房子", "狗", "太阳", "汽车", "树"], hi: ["घर", "कुत्ता", "सूरज", "गाड़ी", "पेड़"],
         };
 
-        // --- Sound Effects ---
         const correctSound = () => new Tone.Synth().toDestination().triggerAttackRelease("C5", "8n");
         const turnStartSound = () => new Tone.Synth().toDestination().triggerAttackRelease("G4", "8n");
 
-        // --- Helper Functions ---
         function maskWord(word) {
             if (!word) return '';
             return Array.from(word).map(ch => /\p{L}|\p{Number}/u.test(ch) ? '_' : ch).join(' ');
         }
 
-        // --- PeerJS Setup ---
         function initializePeer(id) {
             myPeerId = id;
             peer = new Peer(myPeerId, { host: '0.peerjs.com', port: 443, secure: true, debug: 1 });
             peer.on('open', () => {
                 if (isHost) {
-                    const url = new URL(window.location.href);
-                    url.hash = `${myPeerId}_${gameState.language}_${gameState.gameMode}`;
-                    shareLinkInput.value = url.href;
+                    updateShareLink();
                 } else {
                     connectToHost();
                 }
@@ -338,7 +328,6 @@
                 if (audioEl) audioEl.remove();
 
                 if (isHost) {
-                    // MODIFICATION START: Handle player disconnection more robustly
                     const departingPlayerName = gameState.players[conn.peer]?.name || 'A player';
                     const wasArtist = gameState.currentArtistPeerId === conn.peer;
 
@@ -353,7 +342,6 @@
                         updateUI();
                         broadcast({ type: 'gameState', state: gameState });
                     }
-                    // MODIFICATION END
                 }
             });
         }
@@ -420,6 +408,9 @@
                     case 'musicVolume':
                         if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(data.volume);
                         break;
+                    case 'timerUpdate':
+                        updateTimerDisplay(data.timeLeft);
+                        break;
                 }
             }
         }
@@ -433,7 +424,6 @@
             });
         }
 
-        // --- Game Logic ---
         function createInitialGameState() {
             return {
                 players: {},
@@ -445,27 +435,28 @@
                 language: 'en',
                 gameMode: 'word',
                 wordLists: null,
-                roundScore: 10, // Max score for a round
+                roundScore: 10,
+                usedWordIndices: [],
                 aiAscii: null,
             };
         }
 
-        // --- NEW: Updated scoring logic ---
         function handleGuess(peerId, guess) {
             const guesserName = gameState.players[peerId].name;
             const correctWords = Object.values(gameState.secretWordSet).map(w => w.toLowerCase());
 
             if (gameState.isRoundActive && correctWords.includes(guess.toLowerCase())) {
+                if (roundTimerId) clearTimeout(roundTimerId);
+                if (roundTimerIntervalId) clearInterval(roundTimerIntervalId);
+
                 gameState.isRoundActive = false;
 
                 const guesserScore = gameState.roundScore;
-                const artistScore = Math.ceil(guesserScore / 2); // Drawer gets half points, rounded up
+                const artistScore = Math.ceil(guesserScore / 2);
 
                 if (gameState.gameMode === 'ai_image') {
-                    // AI mode has a fixed score for simplicity
                     gameState.players[peerId].score += 15;
                 } else {
-                    // Award points based on the remaining round score
                     gameState.players[peerId].score += guesserScore;
                     if (gameState.players[gameState.currentArtistPeerId]) {
                         gameState.players[gameState.currentArtistPeerId].score += artistScore;
@@ -484,7 +475,6 @@
 
                 setTimeout(startNextRound, 3000);
             } else {
-                // For an incorrect guess, reduce the potential score for the round
                 if (gameState.isRoundActive && gameState.roundScore > 1) {
                     gameState.roundScore--;
                 }
@@ -495,9 +485,12 @@
 
         async function startNextRound() {
             if (isHost) {
+                if (roundTimerId) clearTimeout(roundTimerId);
+                if (roundTimerIntervalId) clearInterval(roundTimerIntervalId);
+
                 gameState.totalRounds = Object.keys(gameState.players).length * 2;
                 gameState.currentRound++;
-                gameState.roundScore = 10; // Reset potential score for the new round
+                gameState.roundScore = 10;
                 gameState.aiAscii = null;
 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -515,11 +508,25 @@
                 gameState.currentArtistPeerId = playerIds[(gameState.currentRound - 1) % playerIds.length];
 
                 if (!gameState.wordLists) {
-                    // MODIFICATION: Increased word count for more variety
                     gameState.wordLists = await getWordsFromGemini(50);
                 }
 
-                const wordIndex = Math.floor(Math.random() * gameState.wordLists.en.length);
+                const totalWordsAvailable = gameState.wordLists.en.length;
+                if (gameState.usedWordIndices.length >= totalWordsAvailable) {
+                    const message = "All words used. Fetching a new list...";
+                    addChatMessage('System', message, false);
+                    broadcast({ type: 'chat', senderName: 'System', message: message, isCorrect: false });
+                    gameState.wordLists = await getWordsFromGemini(50);
+                    gameState.usedWordIndices = [];
+                }
+
+                let wordIndex;
+                do {
+                    wordIndex = Math.floor(Math.random() * gameState.wordLists.en.length);
+                } while (gameState.usedWordIndices.includes(wordIndex));
+
+                gameState.usedWordIndices.push(wordIndex);
+
                 gameState.secretWordSet = {};
                 for (const lang in gameState.wordLists) {
                     gameState.secretWordSet[lang] = gameState.wordLists[lang][wordIndex];
@@ -542,12 +549,52 @@
                 broadcast({ type: 'gameState', state: gameState });
                 turnStartSound();
                 broadcast({ type: 'playSound', sound: 'turnStart' });
+
+                startRoundTimer();
             }
         }
 
-        // --- Gemini API Calls ---
+        function startRoundTimer() {
+            const roundDuration = 120; // 2 minutes in seconds
+            let timeLeft = roundDuration;
+
+            updateTimerDisplay(timeLeft);
+            broadcast({ type: 'timerUpdate', timeLeft: timeLeft });
+
+            roundTimerIntervalId = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay(timeLeft);
+                broadcast({ type: 'timerUpdate', timeLeft: timeLeft });
+            }, 1000);
+
+            roundTimerId = setTimeout(() => {
+                clearInterval(roundTimerIntervalId);
+                if (isHost && gameState.isRoundActive) {
+                    gameState.isRoundActive = false;
+                    const correctWord = gameState.secretWordSet.en;
+                    const message = `Time's up! The word was: ${correctWord}`;
+                    
+                    addChatMessage('System', message, false);
+                    broadcast({ type: 'chat', senderName: 'System', message: message, isCorrect: false });
+                    
+                    updateUI();
+                    broadcast({ type: 'gameState', state: gameState });
+                    
+                    setTimeout(startNextRound, 3000);
+                }
+            }, roundDuration * 1000);
+        }
+
+        function updateTimerDisplay(seconds) {
+            if (seconds < 0) seconds = 0;
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            timerDisplay.textContent = `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+
         async function checkApiKey() {
-            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo"; // API key will be provided by the environment
+            const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             if (!apiKey) return false;
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
             try {
@@ -571,10 +618,33 @@
             } else if (ok === false) {
                 apiStatusDot.classList.add('bg-red-500');
                 apiStatusText.textContent = 'Disconnected';
-            } else {
+            } else if (ok === undefined) {
                 apiStatusDot.classList.add('bg-yellow-500');
                 apiStatusText.textContent = 'Checking...';
+            } else {
+                apiStatusDot.classList.add('bg-gray-500');
+                apiStatusText.textContent = 'Not checked';
             }
+        }
+
+        async function attemptApiConnectionWithRetries(maxAttempts = 5, interval = 5000) {
+            updateApiIndicator(undefined);
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                const isConnected = await checkApiKey();
+                if (isConnected) {
+                    updateApiIndicator(true);
+                    return true;
+                }
+
+                if (attempt < maxAttempts) {
+                    apiStatusText.textContent = `Retrying... (${attempt}/${maxAttempts})`;
+                    await new Promise(resolve => setTimeout(resolve, interval));
+                }
+            }
+
+            updateApiIndicator(false);
+            return false;
         }
 
         async function getWordsFromGemini(count) {
@@ -584,7 +654,6 @@
             const payload = {
                 contents: [{
                     parts: [{
-                        // MODIFICATION: Updated prompt for better vocabulary
                         text: `Give me a JSON object. The keys are "en", "es", "fr", "ko", "zh", "hi". The value for each key must be an array of ${count} moderately difficult, drawable nouns. The words should come from diverse categories (e.g., objects, animals, concepts, actions, places). Ensure the words at each index are direct translations of each other.`
                     }]
                 }],
@@ -605,7 +674,6 @@
                 const result = await response.json();
 
                 if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-                    // The response is a markdown-formatted JSON string, so we need to clean it.
                     const cleanedText = result.candidates[0].content.parts[0].text.replace(/^```json\s*|```\s*$/g, '');
                     return JSON.parse(cleanedText);
                 }
@@ -620,14 +688,17 @@
         async function generateAsciiArt(prompt) {
             const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-            const systemHint = `Create small, recognizable ASCII art using only text characters. Keep it simple (max ~25 lines), no code fences. Subject: "${prompt}".`;
+            const systemInstructionText = `You are an ASCII art generator. Your task is to create simple, clear, and recognizable ASCII art. The art MUST be a direct visual representation of the subject given in the user prompt. Do not include any other objects or characters. The art should be small (around 15-25 lines) and use only standard text characters. Do not include any explanatory text, commentary, or code fences like \`\`\`. The output must be only the ASCII art itself. For example, if the subject is "ocean", create art of waves, not a person on a beach.`;
 
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: systemHint }] }],
+                        contents: [{ parts: [{ text: prompt }] }],
+                        systemInstruction: {
+                            parts: [{ text: systemInstructionText }]
+                        },
                         generationConfig: {
                             temperature: 0.7,
                             maxOutputTokens: 400
@@ -644,16 +715,12 @@
             }
         }
 
-        // --- Drawing Logic ---
-
-        // FIX START: Overhauled resizeCanvas to enforce a consistent aspect ratio
         function resizeCanvas() {
             const container = document.getElementById('canvas-container');
             const { clientWidth, clientHeight } = container;
 
             if (clientWidth <= 0 || clientHeight <= 0) return;
 
-            // Preserve existing drawing to redraw it scaled
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = canvas.width;
@@ -662,11 +729,9 @@
                 tempCtx.drawImage(canvas, 0, 0);
             }
 
-            // Set canvas to fill container
             canvas.width = clientWidth;
             canvas.height = clientHeight;
 
-            // Calculate dimensions of the centered drawable area
             let newWidth = clientWidth;
             let newHeight = newWidth / DRAWING_ASPECT_RATIO;
             if (newHeight > clientHeight) {
@@ -681,25 +746,20 @@
                 y: (clientHeight - newHeight) / 2,
             };
 
-            // Clear canvas and draw the (scaled) old content
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (tempCanvas.width > 0) {
                 ctx.drawImage(tempCanvas, drawable.x, drawable.y, drawable.width, drawable.height);
             }
 
-            // Optional: Draw a border to visualize the drawable area
             ctx.strokeStyle = 'rgba(128, 128, 128, 0.2)';
             ctx.strokeRect(drawable.x, drawable.y, drawable.width, drawable.height);
         }
-        // FIX END
 
         function startDrawing(e) {
-            // FIX START: Allow two-finger scroll on mobile
             if (e.touches && e.touches.length > 1) {
-                drawing = false; // Stop any drawing if multiple fingers are used
+                drawing = false;
                 return;
             }
-            // FIX END
 
             if (myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
             e.preventDefault();
@@ -713,17 +773,14 @@
         }
 
         function draw(e) {
-            // FIX START: Prevent drawing during a two-finger scroll
             if (e.touches && e.touches.length > 1) {
                 return;
             }
-            // FIX END
 
             if (!drawing || myPeerId !== gameState.currentArtistPeerId || gameState.gameMode === 'ai_image') return;
             e.preventDefault();
             const coords = getEventCoords(e);
 
-            // FIX START: Normalize coordinates based on the drawable area
             const drawData = {
                 type: 'draw',
                 peerId: myPeerId,
@@ -733,9 +790,7 @@
                 size: currentBrushSize,
                 senderTheme: document.body.classList.contains('light-mode') ? 'light' : 'dark'
             };
-            // FIX END
 
-            // Use local coordinates directly for the drawer's canvas
             const localX0 = lastX + drawable.x;
             const localY0 = lastY + drawable.y;
             const localX1 = coords.x + drawable.x;
@@ -751,38 +806,30 @@
             [lastX, lastY] = [coords.x, coords.y];
         }
 
-        // FIX START: Updated drawLine to work with both local (pixel) and remote (normalized) coordinates
         function drawLine(x0, y0, x1, y1, color, size, isLocal) {
             ctx.beginPath();
             ctx.strokeStyle = color;
             ctx.lineWidth = size;
             ctx.lineCap = 'round';
             if (isLocal) {
-                // Local coordinates are already absolute pixels
                 ctx.moveTo(x0, y0);
                 ctx.lineTo(x1, y1);
             } else {
-                // Remote coordinates are normalized, scale them to the drawable area
                 ctx.moveTo(x0 * drawable.width + drawable.x, y0 * drawable.height + drawable.y);
                 ctx.lineTo(x1 * drawable.width + drawable.x, y1 * drawable.height + drawable.y);
             }
             ctx.stroke();
         }
-        // FIX END
 
-        // FIX START: Updated getEventCoords to be relative to the drawable area
         function getEventCoords(e) {
             const rect = canvas.getBoundingClientRect();
             const event = e.touches ? e.touches[0] : e;
-            // Return coordinates relative to the drawable area's top-left corner
             return {
                 x: event.clientX - rect.left - drawable.x,
                 y: event.clientY - rect.top - drawable.y
             };
         }
-        // FIX END
 
-        // --- UI & Event Listeners ---
         function updateUI() {
             playerListDiv.innerHTML = '';
             Object.entries(gameState.players).forEach(([peerId, p]) => {
@@ -819,6 +866,7 @@
                     }
                 }
             } else {
+                timerDisplay.textContent = '';
                 if (gameState.currentRound >= gameState.totalRounds && gameState.totalRounds > 0) {
                     const winner = Object.values(gameState.players).sort((a, b) => b.score - a.score)[0];
                     gameStatus.textContent = winner ? `Game Over! Winner: ${winner.name}` : "Game Over!";
@@ -845,16 +893,19 @@
 
         function setLanguage(lang) {
             myLanguage = lang;
+            const key = isHost ? 'createButton' : 'joinButton';
+            joinGameBtn.textContent = translations[lang][key];
+
             document.querySelectorAll('[data-translate-key]').forEach(el => {
-                const key = el.dataset.translateKey;
-                if (translations[lang] && translations[lang][key]) {
-                    if (el.tagName === 'INPUT') el.placeholder = translations[lang][key];
-                    else el.textContent = translations[lang][key];
+                const transKey = el.dataset.translateKey;
+                if (translations[lang] && translations[lang][transKey]) {
+                    if (el.tagName === 'INPUT') el.placeholder = translations[lang][transKey];
+                    else if (el.id !== 'join-game-btn') el.textContent = translations[lang][transKey];
                 }
             });
         }
 
-        // --- NEW: Helper to set default color based on theme ---
+
         function updateDefaultDrawingColor() {
             const isLight = document.body.classList.contains('light-mode');
             const newColor = isLight ? '#000000' : '#FFFFFF';
@@ -864,8 +915,19 @@
                 colorPicker.value = newColor;
             }
         }
+        
+        function updateShareLink() {
+            if (isHost && myPeerId) {
+                const url = new URL(window.location.href);
+                url.hash = `${myPeerId}_${languageSelect.value}_${gamemodeSelect.value}`;
+                shareLinkInput.value = url.href;
+            }
+        }
 
-        languageSelect.addEventListener('change', (e) => setLanguage(e.target.value));
+        languageSelect.addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+            if (isHost) updateShareLink();
+        });
 
         joinGameBtn.addEventListener('click', async () => {
             playerName = playerNameInput.value.trim();
@@ -875,31 +937,41 @@
             }
 
             await Tone.start();
-            setupModal.classList.add('hidden');
-            gameContainer.classList.remove('hidden');
-            resizeCanvas();
-
+            
             const hash = window.location.hash.substring(1);
             isHost = !hash;
 
-            myLanguage = languageSelect.value;
-            setLanguage(myLanguage);
-
-            const selectedMode = gamemodeSelect.value;
-
             if (isHost) {
+                myLanguage = languageSelect.value;
+                const selectedMode = gamemodeSelect.value;
                 myPeerId = `host-${Date.now()}`;
                 gameState.language = myLanguage;
                 gameState.gameMode = selectedMode;
                 gameState.players[myPeerId] = { name: playerName, score: 0, isMuted: false, lang: myLanguage };
                 hostControls.classList.remove('hidden');
+                
                 if (selectedMode === 'ai_image') {
-                    updateApiIndicator(await checkApiKey());
+                    attemptApiConnectionWithRetries().then(ok => {
+                        if (!ok && isHost) {
+                            alert("AI service unavailable. Falling back to Classic mode.");
+                            gamemodeSelect.value = 'word';
+                            gameState.gameMode = 'word';
+                            updateShareLink();
+                        }
+                    });
                 }
             } else {
                 myPeerId = `guest-${Date.now()}`;
-                [roomId, gameState.language, gameState.gameMode] = hash.split('_');
+                const [hashRoomId, hashLang, hashMode] = hash.split('_');
+                roomId = hashRoomId;
+                myLanguage = languageSelect.value; 
+                gameState.language = hashLang;
+                gameState.gameMode = hashMode;
             }
+            
+            setupModal.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            resizeCanvas();
 
             initializePeer(myPeerId);
             updateUI();
@@ -910,6 +982,8 @@
             if (isHost) {
                 gameState.currentRound = 0;
                 Object.values(gameState.players).forEach(p => p.score = 0);
+                gameState.usedWordIndices = [];
+                gameState.wordLists = null;
                 startNextRound();
                 startGameBtn.classList.add('hidden');
             }
@@ -968,36 +1042,25 @@
             }
         });
 
-        // --- API Controls ---
-        if (testApiBtn) {
-            testApiBtn.addEventListener('click', async () => {
-                updateApiIndicator(undefined);
-                const ok = await checkApiKey();
-                updateApiIndicator(ok);
-            });
-        }
-
         gamemodeSelect.addEventListener('change', async (e) => {
             if (!isHost) return;
             const newMode = e.target.value;
+            gameState.gameMode = newMode;
+            updateShareLink();
+
             if (newMode === 'ai_image') {
-                updateApiIndicator(undefined);
-                const ok = await checkApiKey();
-                updateApiIndicator(ok);
+                const ok = await attemptApiConnectionWithRetries();
                 if (!ok) {
                     alert("AI service unavailable. Falling back to Classic.");
                     gamemodeSelect.value = 'word';
                     gameState.gameMode = 'word';
-                } else {
-                    gameState.gameMode = 'ai_image';
+                    updateShareLink();
                 }
             } else {
-                gameState.gameMode = 'word';
+                updateApiIndicator(null);
             }
-            broadcast({ type: 'gameState', state: gameState });
         });
 
-        // Voice Chat Listeners
         joinVoiceBtn.addEventListener('click', async () => {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({
@@ -1046,7 +1109,6 @@
             muteBtn.classList.toggle('hover:bg-green-600', !isMuted);
         }
 
-        // Music Controls
         function initializeMusic() {
             if (musicPlayer) return;
             musicPlayer = new Tone.Player({
@@ -1076,7 +1138,6 @@
             }
         });
 
-        // --- NEW: Updated Theme Toggle Logic ---
         themeToggleBtn.addEventListener('click', () => {
             document.body.classList.toggle('light-mode');
             const isLight = document.body.classList.contains('light-mode');
@@ -1085,16 +1146,24 @@
             updateDefaultDrawingColor();
         });
 
-        // --- NEW: Updated Initial Setup ---
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'light') {
             document.body.classList.add('light-mode');
-            themeToggleBtn.textContent = '🌙'; // Show moon in light mode
+            themeToggleBtn.textContent = '🌙';
         } else {
-            themeToggleBtn.textContent = '☀️'; // Show sun in dark mode
+            themeToggleBtn.textContent = '☀️';
+        }
+        
+        const initialHash = window.location.hash.substring(1);
+        isHost = !initialHash;
+        if (isHost) {
+            joinGameBtn.dataset.translateKey = 'createButton';
+        } else {
+            gamemodeSelect.classList.add('hidden');
+            joinGameBtn.dataset.translateKey = 'joinButton';
         }
 
-        updateDefaultDrawingColor(); // Set initial drawing color
+        updateDefaultDrawingColor();
         setLanguage(languageSelect.value);
 
     </script>
