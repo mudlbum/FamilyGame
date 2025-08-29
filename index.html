@@ -65,7 +65,6 @@
 
         #drawing-canvas {
             cursor: crosshair;
-            /* touch-action: none; */
         }
 
         .tool-btn.active {
@@ -93,7 +92,7 @@
     </style>
 </head>
 
-<body class="flex flex-col min-h-screen items-center p-2 sm:p-4">
+<body class="flex flex-col h-screen items-center p-2 sm:p-4">
 
     <div id="game-container" class="w-full max-w-screen-2xl mx-auto flex-grow flex flex-col lg:flex-row gap-4 hidden">
         <div class="panel w-full lg:w-1/5 p-4 flex flex-col flex-shrink-0">
@@ -137,11 +136,6 @@
                             <button id="copy-link-btn" class="game-button px-3 rounded-r-md text-sm">Copy</button>
                         </div>
                     </div>
-                    <div class="space-y-2">
-                        <label class="text-sm">Master Music Volume</label>
-                        <input type="range" id="host-music-volume-slider" min="0" max="1" step="0.01" value="0.2"
-                            class="w-full">
-                    </div>
                     <button id="start-game-btn" class="game-button w-full py-2 px-4 rounded-lg mt-4">Start Game</button>
                 </div>
             </div>
@@ -155,10 +149,9 @@
                 <div id="ai-image-display" class="mt-2 hidden max-h-48 mx-auto">
                     <img id="ai-image" class="max-h-48 rounded-lg mx-auto" />
                 </div>
-                <div id="ai-ascii-display"
-                    class="mt-2 hidden max-h-64 overflow-auto mx-auto bg-black/40 rounded-lg p-3">
-                    <pre id="ai-ascii" class="whitespace-pre-wrap leading-4 text-xs"></pre>
-                </div>
+            </div>
+            <div id="ai-ascii-display" class="panel p-3 hidden flex-grow overflow-auto">
+                 <pre id="ai-ascii" class="whitespace-pre-wrap leading-4 text-xs m-auto"></pre>
             </div>
             <div id="canvas-container" class="panel p-2 flex-grow relative">
                 <canvas id="drawing-canvas"></canvas>
@@ -226,6 +219,7 @@
         const timerDisplay = document.getElementById('timer-display');
         const aiImageDisplay = document.getElementById('ai-image-display');
         const aiImage = document.getElementById('ai-image');
+        const canvasContainer = document.getElementById('canvas-container');
         const canvas = document.getElementById('drawing-canvas');
         const ctx = canvas.getContext('2d');
         const artistTools = document.getElementById('artist-tools');
@@ -244,7 +238,6 @@
         const endCallBtn = document.getElementById('end-call-btn');
         const audioContainer = document.getElementById('audio-container');
         const musicVolumeSlider = document.getElementById('music-volume-slider');
-        const hostMusicVolumeSlider = document.getElementById('host-music-volume-slider');
         const muteMusicBtn = document.getElementById('mute-music-btn');
         const themeToggleBtn = document.getElementById('theme-toggle-btn');
         const aiAsciiDisplay = document.getElementById('ai-ascii-display');
@@ -369,9 +362,6 @@
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
                         broadcast(data, data.peerId);
                         break;
-                    case 'musicVolume':
-                        broadcast(data);
-                        break;
                 }
             } else {
                 switch (data.type) {
@@ -404,9 +394,6 @@
                         break;
                     case 'chat':
                         addChatMessage(data.senderName, data.message, data.isCorrect);
-                        break;
-                    case 'musicVolume':
-                        if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(data.volume);
                         break;
                     case 'timerUpdate':
                         updateTimerDisplay(data.timeLeft);
@@ -688,17 +675,14 @@
         async function generateAsciiArt(prompt) {
             const apiKey = "AIzaSyDbIsa8aSaRIlKnXXhMh89qCUUws33B5uo";
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-            const systemInstructionText = `You are an ASCII art generator. Your task is to create simple, clear, and recognizable ASCII art. The art MUST be a direct visual representation of the subject given in the user prompt. Do not include any other objects or characters. The art should be small (around 15-25 lines) and use only standard text characters. Do not include any explanatory text, commentary, or code fences like \`\`\`. The output must be only the ASCII art itself. For example, if the subject is "ocean", create art of waves, not a person on a beach.`;
+            const fullPrompt = `You are an ASCII art generator. Your task is to create simple, clear, and recognizable ASCII art. The art MUST be a direct visual representation of the subject given below. Do not include any other objects or characters. The art should be small (around 15-25 lines) and use only standard text characters. Do not include any explanatory text, commentary, or code fences like \`\`\`. The output must be only the ASCII art itself. For example, if the subject is "ocean", create art of waves, not a person on a beach.\n\nSubject: ${prompt}`;
 
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        systemInstruction: {
-                            parts: [{ text: systemInstructionText }]
-                        },
+                        contents: [{ parts: [{ text: fullPrompt }] }],
                         generationConfig: {
                             temperature: 0.7,
                             maxOutputTokens: 400
@@ -841,9 +825,11 @@
 
             const isArtist = myPeerId === gameState.currentArtistPeerId;
             artistTools.classList.toggle('hidden', !isArtist || gameState.gameMode === 'ai_image');
+            aiImageDisplay.classList.add('hidden'); // This mode is unused for now
 
-            aiImageDisplay.classList.add('hidden');
-            aiAsciiDisplay.classList.add('hidden');
+            const isAsciiModeActive = gameState.isRoundActive && gameState.gameMode === 'ai_image' && gameState.aiAscii;
+            canvasContainer.classList.toggle('hidden', isAsciiModeActive);
+            aiAsciiDisplay.classList.toggle('hidden', !isAsciiModeActive);
 
             if (gameState.isRoundActive) {
                 const viewerWord = gameState.secretWordSet?.[myLanguage];
@@ -853,7 +839,6 @@
                     wordDisplay.textContent = viewerWord ? maskWord(viewerWord) : '';
                     if (gameState.aiAscii) {
                         aiAscii.textContent = gameState.aiAscii;
-                        aiAsciiDisplay.classList.remove('hidden');
                     }
                 } else {
                     if (isArtist) {
@@ -1127,14 +1112,6 @@
             if (musicPlayer) {
                 musicPlayer.mute = !musicPlayer.mute;
                 muteMusicBtn.textContent = musicPlayer.mute ? '🔇' : '🔊';
-            }
-        });
-
-        hostMusicVolumeSlider.addEventListener('input', (e) => {
-            if (isHost) {
-                const volume = e.target.value;
-                if (musicPlayer) musicPlayer.volume.value = Tone.gainToDb(volume);
-                broadcast({ type: 'musicVolume', volume: volume });
             }
         });
 
